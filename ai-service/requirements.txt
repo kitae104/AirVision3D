@@ -1,0 +1,10 @@
+# AirVision 3D AI Service - Phase 1 (경량 스캐폴드)
+# PyTorch, OpenCV 등 AI 의존성은 Phase 4~5에서 추가한다.
+fastapi==0.115.14
+uvicorn[standard]==0.35.0
+pydantic==2.11.7
+pydantic-settings==2.10.1
+
+# 테스트
+pytest==8.4.1
+httpx==0.28.1

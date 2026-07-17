@@ -1,0 +1,56 @@
+# === 환경변수 / 비밀정보 ===
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# === Java / Gradle (backend) ===
+backend/build/
+backend/.gradle/
+backend/out/
+*.class
+*.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
+
+# === Python (ai-service) ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# === Node (frontend) ===
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# === 데이터 / 모델 (대용량 파일 커밋 금지) ===
+data/raw/*
+data/processed/*
+data/models/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/models/.gitkeep
+# sample은 소용량 샘플만 커밋 허용 (대용량 파일은 개별 확인)
+data/sample/*.zip
+data/sample/*.tar.gz
+*.pt
+*.pth
+*.onnx
+
+# === IDE / OS ===
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# === 로그 / 임시 파일 ===
+*.log
+logs/
+tmp/

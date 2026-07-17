@@ -1,0 +1,19 @@
+# AirVision 3D Backend 설정
+# 민감한 값은 환경변수로 주입한다. (.env / docker-compose 참고)
+server:
+  port: ${BACKEND_PORT:8080}
+
+spring:
+  application:
+    name: airvision-backend
+
+# AI 서비스 주소 (Phase 5에서 사용 예정)
+airvision:
+  ai-service:
+    url: ${AI_SERVICE_URL:http://localhost:8000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
