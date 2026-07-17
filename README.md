@@ -66,6 +66,18 @@ POSTGRES_PASSWORD=<비밀번호>
 
 ### 3. 서비스 실행
 
+**통합 실행 (권장, Windows)**
+
+```powershell
+.\run.ps1          # backend + ai-service + frontend를 각각 별도 창으로 실행
+.\run.ps1 -Stop    # 전체 종료
+# 실행 정책 오류 시: powershell -ExecutionPolicy Bypass -File .\run.ps1
+```
+
+최초 실행 시 ai-service 가상환경과 frontend 의존성을 자동으로 설치한다.
+
+**개별 실행**
+
 **Backend** (DB 연결 필요)
 
 ```bash
