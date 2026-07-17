@@ -11,7 +11,7 @@
 |---|---|---|---|
 | 0 | 저장소 분석과 계획 | VERIFIED | 계획 사용자 승인 완료 |
 | 1 | 프로젝트 기반 구축 | VERIFIED | Docker 제외 결정(2026-07-17)으로 잔여 항목 소멸. 전 항목 로컬 검증 완료 |
-| 2 | 데이터베이스 및 샘플 데이터 | NOT_STARTED | |
+| 2 | 데이터베이스 및 샘플 데이터 | IN_PROGRESS | 코드 작성·슬라이스 테스트 완료. 실 DB 검증은 원격 DB 접속 정보 대기 |
 | 3 | IDW 보간 | NOT_STARTED | |
 | 4 | AI 데이터 파이프라인 | NOT_STARTED | |
 | 5 | AI 모델 학습과 추론 | NOT_STARTED | |
@@ -55,7 +55,29 @@
 - Spring Boot는 계획의 3.x 대신 4.1 사용 (start.spring.io가 3.x 생성 종료). 테스트 애노테이션 패키지가
   `org.springframework.boot.webmvc.test.autoconfigure`로 변경된 점에 주의.
 
-## Phase 2 이후
+## Phase 2. 데이터베이스 및 샘플 데이터 — IN_PROGRESS (2026-07-17)
+
+- [x] Flyway V1: 8개 테이블 스키마(users, observation_sites, observations, images,
+      ai_models, model_metrics, predictions, interpolation_results) + 인덱스/FK/유일성 제약
+      + PostGIS geom GENERATED 컬럼 — COMPLETED
+- [x] Flyway V2: 샘플 데이터(수도권 관측소 7곳, 관측소별 최근 7일 시간당 관측값 합성 생성) — COMPLETED
+- [x] 엔티티/Repository: ObservationSite, Observation (+ Specification 검색) — COMPLETED
+- [x] CRUD API: /api/sites, /api/observations (목록·상세·등록·수정·삭제, 페이지네이션·기간 필터) — COMPLETED
+- [x] 공통 예외 처리(GlobalExceptionHandler: 404/400/409/500 → 공통 응답 형식) — VERIFIED (슬라이스 테스트)
+- [x] Swagger(springdoc) 의존성 추가 — COMPLETED (/swagger-ui.html, 실행 확인은 DB 연결 후)
+- [x] 컨트롤러 슬라이스 테스트 14건 (mock 서비스, DB 불필요) — VERIFIED (gradlew build 통과)
+- [ ] 실 DB 검증 — **BLOCKED: 원격 PostgreSQL 접속 정보 대기.**
+      정보 등록 후 검증 항목: ① bootRun 시 Flyway V1·V2 적용 ② GET /api/sites 로 샘플 관측소 7곳 조회
+      ③ GET /api/sites/{id} 의 geomWkt(PostGIS) 확인 ④ 관측값 CRUD 왕복 ⑤ Swagger UI 접근
+- [ ] 사용자 인증(JWT), CSV 업로드 — 4주차 범위 (별도 진행)
+
+### 참고
+
+- 백엔드는 이제 기동 시 DB 연결이 필수다(JPA+Flyway). DB 없이 실행하면 기동 실패가 정상 동작이다.
+- 스키마 삭제 시 `AirvisionBackendApplicationTests`(전체 컨텍스트 로드 테스트)는 DB 필요로 제거함.
+  DB 확보 후 통합 테스트로 재도입 예정.
+
+## Phase 3 이후
 
 implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
 
