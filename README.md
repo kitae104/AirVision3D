@@ -142,9 +142,28 @@ cd frontend && npm run build
 }
 ```
 
+## 통합 테스트
+
+전체 스택 실행 상태에서 29개 항목을 자동 검증한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\integration-test.ps1
+```
+
 ## 문서
 
-- [구현 계획](docs/implementation-plan.md)
-- [진행 상황](docs/progress.md)
-- [DB 초기 설정](database/setup/README.md)
-- 작업 규칙: [CLAUDE.md](CLAUDE.md)
+| 문서 | 내용 |
+|---|---|
+| [requirements.md](docs/requirements.md) | 요구사항 정의와 구현 현황 |
+| [architecture.md](docs/architecture.md) | 시스템 아키텍처·설계 결정 |
+| [database-design.md](docs/database-design.md) | ERD·스키마 설계 |
+| [api-spec.md](docs/api-spec.md) | API 명세 (등급 기준 포함) |
+| [ai-model-design.md](docs/ai-model-design.md) | AI 모델·데이터 파이프라인 설계 |
+| [idw-algorithm.md](docs/idw-algorithm.md) | IDW 알고리즘·교차검증 결과 |
+| [ui-screen-spec.md](docs/ui-screen-spec.md) | 화면설계서 |
+| [test-plan.md](docs/test-plan.md) | 테스트 계획·결과 |
+| [deployment.md](docs/deployment.md) | 설치·배포 매뉴얼·문제 해결 |
+| [demo-scenario.md](docs/demo-scenario.md) | 발표 시연 시나리오 |
+| [capstone-report-outline.md](docs/capstone-report-outline.md) | 결과보고서 목차 |
+| [implementation-plan.md](docs/implementation-plan.md) / [progress.md](docs/progress.md) | 구현 계획 / 진행 상황 |
+| [CLAUDE.md](CLAUDE.md) | 작업 규칙 |

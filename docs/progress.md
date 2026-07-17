@@ -18,7 +18,7 @@
 | 6 | 웹 대시보드 | COMPLETED | 화면 8종+JWT 인증 구현, 빌드·API 흐름 검증 완료. 브라우저 육안 확인만 대기(2026-07-18) |
 | 7 | CesiumJS 지도 | COMPLETED | 3D 레이어·격자·팝업·토글·카메라 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
 | 8 | 시계열 시각화 | COMPLETED | 시계열 API·Clock/Timeline·시간별 색상/라벨 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
-| 9 | 통합 테스트와 배포 | NOT_STARTED | |
+| 9 | 통합 테스트와 배포 | VERIFIED | 통합 테스트 29건 통과, 산출물 문서 11종 작성(2026-07-18). 브라우저 육안 확인만 잔여 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -232,9 +232,23 @@
 - [ ] 브라우저 육안 확인 — 사용자 확인 필요: /map에서 기간 선택 → 시계열 로드 → 재생 시
       격자 색·라벨 변화 확인
 
-## Phase 9
+## Phase 9. 통합 테스트와 배포 — VERIFIED (2026-07-18)
 
-implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
+- [x] 자동 통합 테스트: scripts/integration-test.ps1 — **29 PASS / 0 FAIL** (실 DB·실 AI 서비스)
+      헬스체크·인증/권한·CRUD+PostGIS·대시보드·IDW(동일좌표 실측 일치)·AI 예측·시각화/시계열
+- [x] 오류 상황 점검: 401/403/400/404/502 전 경로 통합 테스트에 포함 — VERIFIED
+- [x] README 완성 (run.ps1·통합 테스트·문서 색인) — VERIFIED
+- [x] 시연 시나리오 (docs/demo-scenario.md, 예상 질문 포함) — COMPLETED
+- [x] 결과보고서 목차 (docs/capstone-report-outline.md) — COMPLETED
+- [x] 산출물 문서: requirements / architecture / database-design / api-spec /
+      ai-model-design / ui-screen-spec / test-plan / deployment — COMPLETED
+- [x] 통합 실행 스크립트 run.ps1 (+-Stop) — VERIFIED
+
+### 잔여 항목 (사용자 확인 후 처리)
+
+- Phase 6~8 브라우저 육안 확인 → 확인 시 해당 Phase VERIFIED 승격
+- 보류/선택: CSV 업로드(실측 데이터 확보 시), Modified IDW, EfficientNet 비교,
+  웹 ROI, CZML, 듀얼맵, 화면 캡처, 7x7x3 격자, 프론트 컴포넌트 테스트
 
 ## 확인 대기 사항 (BLOCKED 아님, 기본 가정으로 진행 가능)
 
