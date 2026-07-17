@@ -1,12 +1,46 @@
 package com.airvision.backend.observation;
 
 import java.time.Instant;
+import java.util.List;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ObservationRepository
         extends JpaRepository<Observation, Long>, JpaSpecificationExecutor<Observation> {
+
+    /** 관측소별 최신 PM2.5 (기준 시각 이전, pm25 존재 건만). IDW 보간의 관측지점 입력으로 사용. */
+    interface SitePm25 {
+        Long getSiteId();
+
+        String getSiteName();
+
+        Double getLatitude();
+
+        Double getLongitude();
+
+        Double getPm25();
+
+        Instant getObservedAt();
+    }
+
+    @Query(value = """
+            SELECT DISTINCT ON (o.site_id)
+                   o.site_id     AS siteId,
+                   s.name        AS siteName,
+                   s.latitude    AS latitude,
+                   s.longitude   AS longitude,
+                   o.pm25        AS pm25,
+                   o.observed_at AS observedAt
+            FROM observations o
+            JOIN observation_sites s ON s.id = o.site_id
+            WHERE o.pm25 IS NOT NULL
+              AND o.observed_at <= :at
+            ORDER BY o.site_id, o.observed_at DESC
+            """, nativeQuery = true)
+    List<SitePm25> findLatestPm25PerSite(@Param("at") Instant at);
 
     /** 관측소/기간 조건을 조합한 검색 조건 (null 파라미터는 조건에서 제외). */
     static Specification<Observation> search(Long siteId, Instant from, Instant to) {

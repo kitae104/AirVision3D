@@ -12,7 +12,7 @@
 | 0 | 저장소 분석과 계획 | VERIFIED | 계획 사용자 승인 완료 |
 | 1 | 프로젝트 기반 구축 | VERIFIED | Docker 제외 결정(2026-07-17)으로 잔여 항목 소멸. 전 항목 로컬 검증 완료 |
 | 2 | 데이터베이스 및 샘플 데이터 | VERIFIED | 원격 DB에서 Flyway 적용·CRUD·PostGIS 검증 완료(2026-07-17). JWT/CSV는 후속 |
-| 3 | IDW 보간 | NOT_STARTED | |
+| 3 | IDW 보간 | VERIFIED | 단위 테스트 + Python 교차검증(1e-6) + 실 DB API 검증 완료(2026-07-17). Modified IDW는 선택 |
 | 4 | AI 데이터 파이프라인 | NOT_STARTED | |
 | 5 | AI 모델 학습과 추론 | NOT_STARTED | |
 | 6 | 웹 대시보드 | NOT_STARTED | |
@@ -82,7 +82,22 @@
 - V1 마이그레이션 첫 구문에서 `CREATE EXTENSION IF NOT EXISTS postgis`를 수행한다.
   DB 계정에 권한이 없으면 database/setup/01-enable-postgis.sql을 관리자로 실행할 것.
 
-## Phase 3 이후
+## Phase 3. IDW 보간 — VERIFIED (2026-07-17)
+
+- [x] Haversine 거리 함수 (GeoUtils, R=6371.0088km) — VERIFIED
+- [x] 일반 IDW 구현 (IdwInterpolator: p 설정 가능, 거리 0 → 실제값 반환) — VERIFIED
+- [x] 입력 검증 (빈 관측지점/비양수 p → 400, 좌표 범위 검증) — VERIFIED
+- [x] 단위 테스트 12건 (거리 4건 + IDW 8건) — VERIFIED
+- [x] Python 기준 구현(scripts/idw_reference.py)과 허용오차 1e-6 이내 일치 — VERIFIED
+- [x] 보간 API (POST /api/interpolations/run, GET /api/interpolations) — VERIFIED (실 DB)
+- [x] 보간 결과 DB 저장 (interpolation_results) — VERIFIED (3건 저장·조회 확인)
+- [x] 테스트 결과 문서화 — docs/idw-algorithm.md
+- [ ] Modified IDW — 선택 기능, 필수 전체 VERIFIED 후 착수
+
+실 DB 검증 내용: 임의 2개 지점(서울숲 14.0185, 김포공항 17.8273) 보간 성공,
+관측소 동일 좌표 입력 시 해당 관측소 최신 실제 관측값(5.1) 그대로 반환 확인.
+
+## Phase 4 이후
 
 implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
 
