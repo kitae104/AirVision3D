@@ -12,11 +12,13 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.18.1",
+    "cesium": "^1.143.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
     "recharts": "^3.9.2",
     "tailwindcss": "^4.3.3",
+    "vite-plugin-static-copy": "^3.4.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

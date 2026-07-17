@@ -16,7 +16,7 @@
 | 4 | AI 데이터 파이프라인 | VERIFIED | 전처리·분할·Dataset 테스트 25건 통과, 샘플 120장 생성·DataLoader 확인(2026-07-17) |
 | 5 | AI 모델 학습과 추론 | VERIFIED | 학습 CLI·추론 API·지표 6종 실검증 완료(2026-07-18). Spring 연동은 후속 |
 | 6 | 웹 대시보드 | COMPLETED | 화면 8종+JWT 인증 구현, 빌드·API 흐름 검증 완료. 브라우저 육안 확인만 대기(2026-07-18) |
-| 7 | CesiumJS 지도 | NOT_STARTED | |
+| 7 | CesiumJS 지도 | COMPLETED | 3D 레이어·격자·팝업·토글·카메라 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
 | 8 | 시계열 시각화 | NOT_STARTED | |
 | 9 | 통합 테스트와 배포 | NOT_STARTED | |
 
@@ -185,7 +185,33 @@
 - Boot 4에서 SecurityConfig 생성 시점에 ObjectMapper 빈 주입 불가 → 자체 생성(JavaTime 모듈)
 - 기본 계정 생성(CommandLineRunner)은 헬스체크 UP 직후 약 1초 뒤 완료 — 기동 직후 로그인 주의
 
-## Phase 7 이후
+## Phase 7. CesiumJS 지도 — COMPLETED (2026-07-18)
+
+### 백엔드 (VERIFIED)
+
+- [x] 시각화 API: GET /api/viz/observations/latest (관측소별 최신 관측, 7개 지점 확인),
+      GET /api/viz/predictions/latest (관측소별 최신 예측, DISTINCT ON) — VERIFIED (실 DB)
+
+### 프론트엔드 (COMPLETED — 브라우저 육안 확인 대기)
+
+- [x] Cesium Viewer 구성: cesium npm + vite-plugin-static-copy(/cesium 자산 서빙),
+      CESIUM_BASE_URL 설정. ion 토큰 없으면 OSM 타일 폴백(토큰은 VITE_CESIUM_ION_TOKEN)
+- [x] 관측소/예측/보간 지점 마커(포인트+라벨, 레이어별 색상) — COMPLETED
+- [x] 미세먼지 3D 박스 격자: 관측소당 3x3x2 (config/mapConfig.ts에서 크기·간격·투명도 관리) — COMPLETED
+- [x] 농도별 색상: 등급 설정(config/grades.ts) 공유 — COMPLETED
+- [x] 객체 클릭 상세정보(InfoBox: 구분·PM2.5·등급·시각·좌표) — COMPLETED
+- [x] 레이어 표시/숨김 토글 3종 — COMPLETED
+- [x] 관측소 선택 → 카메라 flyTo — COMPLETED
+- [x] 등급 범례 표시 — COMPLETED
+- [x] npm run build 통과, /cesium/Widgets/widgets.css 200, /map 서빙 200 — VERIFIED
+- [ ] 브라우저 육안 확인 — 사용자 확인 필요 (http://localhost:5173/map)
+- [ ] 화면 캡처 기능 — 선택 기능(후순위)
+
+### 알려진 문제
+
+- 번들 크기 경고(Cesium 포함 4.7MB, gzip 1.3MB). 필요 시 MapPage lazy import로 코드 분할 예정.
+
+## Phase 8 이후
 
 implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
 
