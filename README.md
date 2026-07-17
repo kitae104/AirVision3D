@@ -95,6 +95,17 @@ npm run dev
 # 확인: http://localhost:5173
 ```
 
+### 4. 기본 계정
+
+백엔드 최초 기동 시 users 테이블이 비어 있으면 자동 생성된다.
+
+| 아이디 | 비밀번호(기본값) | 역할 |
+|---|---|---|
+| admin | admin1234! | 관리자 (등록·예측·보간·삭제) |
+| user | user1234! | 일반 사용자 (조회) |
+
+비밀번호는 `.env`의 `ADMIN_INIT_PASSWORD` / `USER_INIT_PASSWORD`로 변경할 수 있다.
+
 ## 테스트
 
 ```bash

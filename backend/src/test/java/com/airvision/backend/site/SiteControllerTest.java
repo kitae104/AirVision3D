@@ -17,12 +17,14 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** 관측소 CRUD API의 응답 형식과 상태코드를 검증한다 (DB 불필요, 서비스는 mock). */
+@AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(SiteController.class)
 class SiteControllerTest {
 

@@ -17,12 +17,14 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** 예측 실행 API의 multipart 처리·오류 매핑을 검증한다 (DB·AI 서비스 불필요). */
+@AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(PredictionController.class)
 class PredictionControllerTest {
 

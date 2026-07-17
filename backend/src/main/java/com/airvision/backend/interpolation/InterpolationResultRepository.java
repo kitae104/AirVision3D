@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface InterpolationResultRepository extends JpaRepository<InterpolationResult, Long> {
 
     Page<InterpolationResult> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    long countByCreatedAtAfter(java.time.Instant time);
 }

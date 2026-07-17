@@ -11,12 +11,14 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** IDW 보간 실행 API의 요청 검증과 응답 형식을 확인한다 (DB 불필요, 서비스는 mock). */
+@AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(InterpolationController.class)
 class InterpolationControllerTest {
 

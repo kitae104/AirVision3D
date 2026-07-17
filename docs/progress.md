@@ -15,7 +15,7 @@
 | 3 | IDW 보간 | VERIFIED | 단위 테스트 + Python 교차검증(1e-6) + 실 DB API 검증 완료(2026-07-17). Modified IDW는 선택 |
 | 4 | AI 데이터 파이프라인 | VERIFIED | 전처리·분할·Dataset 테스트 25건 통과, 샘플 120장 생성·DataLoader 확인(2026-07-17) |
 | 5 | AI 모델 학습과 추론 | VERIFIED | 학습 CLI·추론 API·지표 6종 실검증 완료(2026-07-18). Spring 연동은 후속 |
-| 6 | 웹 대시보드 | NOT_STARTED | |
+| 6 | 웹 대시보드 | COMPLETED | 화면 8종+JWT 인증 구현, 빌드·API 흐름 검증 완료. 브라우저 육안 확인만 대기(2026-07-18) |
 | 7 | CesiumJS 지도 | NOT_STARTED | |
 | 8 | 시계열 시각화 | NOT_STARTED | |
 | 9 | 통합 테스트와 배포 | NOT_STARTED | |
@@ -150,7 +150,42 @@
   `cd ai-service; .venv\Scripts\python scripts/train_model.py --epochs 5`
 - 서버 검증 시 localhost 대신 127.0.0.1 사용 권장 (Windows IPv6 해석 지연 이슈)
 
-## Phase 6 이후
+## Phase 6. 웹 대시보드 — COMPLETED (2026-07-18)
+
+### 백엔드 (VERIFIED)
+
+- [x] JWT 인증: 로그인 API, JwtService(HS256), JwtAuthFilter, SecurityConfig — VERIFIED
+      (무토큰 401, USER의 쓰기 요청 403, 잘못된 비밀번호 401, admin/user 로그인 200 실측)
+- [x] 권한: GET=USER/ADMIN, 쓰기/실행=ADMIN, 헬스·로그인·Swagger 개방 — VERIFIED
+- [x] 기본 계정 자동 생성(admin/user, 비밀번호 env 교체 가능) — VERIFIED
+- [x] CORS(5173 개발 서버) — COMPLETED
+- [x] 대시보드 API: /api/dashboard/summary, /api/dashboard/hourly — VERIFIED (실 DB)
+- [x] 등급 기준 설정화(airvision.pm25-grades, @ConfigurationProperties) — VERIFIED
+
+### 프론트엔드 (COMPLETED — 브라우저 육안 확인 대기)
+
+- [x] 로그인 화면(JWT 저장·자동 첨부·401 시 자동 로그아웃) — COMPLETED
+- [x] 대시보드(요약 카드 5종 + 시간별 PM2.5 차트 + 관측vs예측 차트, Recharts) — COMPLETED
+- [x] 관측 데이터 목록(관측소 필터·페이지네이션·ADMIN 삭제) — COMPLETED
+- [x] 데이터 등록(관측소/관측값 폼, ADMIN 전용) — COMPLETED
+- [x] AI 예측 실행(이미지 업로드+환경값 → 결과 카드+최근 이력) — COMPLETED
+- [x] IDW 보간 실행(동적 대상 목록+p 설정 → 결과 카드+이력) — COMPLETED
+- [x] 모델 성능(회귀/등급 지표 구분 표시 + 혼동행렬) — COMPLETED
+- [x] 3D 지도 자리표시자(Phase 7 안내) — COMPLETED
+- [x] 오류·로딩 처리(공통 errorMessage, 로딩 상태, 폼 검증) — COMPLETED
+- [x] `npm run build`(tsc+vite) 통과, dev 서버 서빙 확인 — VERIFIED
+- [x] 화면과 동일한 API 흐름(관측소·관측값 등록, 예측, 보간) 스크립트 검증 — VERIFIED
+- [ ] 브라우저 육안 확인 — Chrome 확장 미연결로 자동 검증 불가. 사용자 확인 필요:
+      http://localhost:5173 접속 → admin/admin1234! 로그인 → 각 화면 확인
+
+### 트러블슈팅 기록
+
+- @WebMvcTest 슬라이스는 Filter 컴포넌트를 포함하므로 JwtAuthFilter를 @Component로 두면
+  테스트가 깨짐 → SecurityConfig에서 직접 생성으로 변경
+- Boot 4에서 SecurityConfig 생성 시점에 ObjectMapper 빈 주입 불가 → 자체 생성(JavaTime 모듈)
+- 기본 계정 생성(CommandLineRunner)은 헬스체크 UP 직후 약 1초 뒤 완료 — 기동 직후 로그인 주의
+
+## Phase 7 이후
 
 implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
 

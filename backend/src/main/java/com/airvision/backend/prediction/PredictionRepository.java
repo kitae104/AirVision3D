@@ -9,4 +9,6 @@ public interface PredictionRepository extends JpaRepository<Prediction, Long> {
     Page<Prediction> findAllByOrderByPredictedAtDesc(Pageable pageable);
 
     Page<Prediction> findBySite_IdOrderByPredictedAtDesc(Long siteId, Pageable pageable);
+
+    long countByPredictedAtAfter(java.time.Instant time);
 }

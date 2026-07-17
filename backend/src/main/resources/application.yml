@@ -24,10 +24,25 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
-# AI 서비스 주소 (Phase 5에서 사용 예정)
 airvision:
   ai-service:
     url: ${AI_SERVICE_URL:http://localhost:8000}
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
+    expiration-hours: 12
+  init:
+    admin-password: ${ADMIN_INIT_PASSWORD:admin1234!}
+    user-password: ${USER_INIT_PASSWORD:user1234!}
+  # 미세먼지 등급 기준 (설정 파일 관리, ai-service config/grades.json과 동일 값 유지)
+  pm25-grades:
+    - name: 좋음
+      upper: 15
+    - name: 보통
+      upper: 35
+    - name: 나쁨
+      upper: 75
+    - name: 매우나쁨
+      upper:
 
 management:
   endpoints:

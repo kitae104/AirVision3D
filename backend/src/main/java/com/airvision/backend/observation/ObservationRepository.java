@@ -29,6 +29,23 @@ public interface ObservationRepository
         Instant getObservedAt();
     }
 
+    /** 시간별 평균 PM2.5 (대시보드 차트용). */
+    interface HourlyAvg {
+        Instant getHour();
+
+        Double getAvgPm25();
+    }
+
+    @Query(value = """
+            SELECT date_trunc('hour', o.observed_at) AS hour,
+                   AVG(o.pm25)                       AS avgPm25
+            FROM observations o
+            WHERE o.observed_at >= :from AND o.pm25 IS NOT NULL
+            GROUP BY 1
+            ORDER BY 1
+            """, nativeQuery = true)
+    List<HourlyAvg> findHourlyAveragePm25(@Param("from") Instant from);
+
     @Query(value = """
             SELECT DISTINCT ON (o.site_id)
                    o.site_id     AS siteId,
