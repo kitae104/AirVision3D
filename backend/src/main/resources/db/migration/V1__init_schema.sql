@@ -1,10 +1,12 @@
 -- =============================================================
 -- AirVision 3D 초기 스키마 (V1)
--- 전제: 대상 DB에 PostGIS 확장이 활성화되어 있어야 한다.
---       (database/setup/01-enable-postgis.sql 참고)
 -- geom 컬럼은 latitude/longitude로부터 자동 생성(GENERATED)되므로
 -- 애플리케이션은 위도/경도만 저장하면 된다.
 -- =============================================================
+
+-- PostGIS 확장 활성화 (권한이 없으면 실패하므로 그 경우
+-- database/setup/01-enable-postgis.sql을 관리자 계정으로 실행할 것)
+CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- 사용자 (일반 사용자 / 관리자)
 CREATE TABLE users (

@@ -11,7 +11,7 @@
 |---|---|---|---|
 | 0 | 저장소 분석과 계획 | VERIFIED | 계획 사용자 승인 완료 |
 | 1 | 프로젝트 기반 구축 | VERIFIED | Docker 제외 결정(2026-07-17)으로 잔여 항목 소멸. 전 항목 로컬 검증 완료 |
-| 2 | 데이터베이스 및 샘플 데이터 | IN_PROGRESS | 코드 작성·슬라이스 테스트 완료. 실 DB 검증은 원격 DB 접속 정보 대기 |
+| 2 | 데이터베이스 및 샘플 데이터 | VERIFIED | 원격 DB에서 Flyway 적용·CRUD·PostGIS 검증 완료(2026-07-17). JWT/CSV는 후속 |
 | 3 | IDW 보간 | NOT_STARTED | |
 | 4 | AI 데이터 파이프라인 | NOT_STARTED | |
 | 5 | AI 모델 학습과 추론 | NOT_STARTED | |
@@ -66,16 +66,21 @@
 - [x] 공통 예외 처리(GlobalExceptionHandler: 404/400/409/500 → 공통 응답 형식) — VERIFIED (슬라이스 테스트)
 - [x] Swagger(springdoc) 의존성 추가 — COMPLETED (/swagger-ui.html, 실행 확인은 DB 연결 후)
 - [x] 컨트롤러 슬라이스 테스트 14건 (mock 서비스, DB 불필요) — VERIFIED (gradlew build 통과)
-- [ ] 실 DB 검증 — **BLOCKED: 원격 PostgreSQL 접속 정보 대기.**
-      정보 등록 후 검증 항목: ① bootRun 시 Flyway V1·V2 적용 ② GET /api/sites 로 샘플 관측소 7곳 조회
-      ③ GET /api/sites/{id} 의 geomWkt(PostGIS) 확인 ④ 관측값 CRUD 왕복 ⑤ Swagger UI 접근
-- [ ] 사용자 인증(JWT), CSV 업로드 — 4주차 범위 (별도 진행)
+- [x] 실 DB 검증 — VERIFIED (2026-07-17, 원격 PostgreSQL 114.71.147.30:25432)
+      ① Flyway V1·V2 적용 성공 (PostGIS 확장 자동 활성화 포함)
+      ② GET /api/sites → 샘플 관측소 7곳 조회 (한글 정상)
+      ③ geomWkt = POINT(126.978 37.5665) → PostGIS 저장·조회 확인
+      ④ 관측소 등록→수정→삭제→404 왕복, 관측값 등록·필터 조회(샘플 1,184건) 확인
+      ⑤ 잘못된 위도 입력 → 400, Swagger UI → 200
+- [ ] 사용자 인증(JWT), CSV 업로드 — 4주차 범위 (후속 진행)
 
 ### 참고
 
-- 백엔드는 이제 기동 시 DB 연결이 필수다(JPA+Flyway). DB 없이 실행하면 기동 실패가 정상 동작이다.
-- 스키마 삭제 시 `AirvisionBackendApplicationTests`(전체 컨텍스트 로드 테스트)는 DB 필요로 제거함.
-  DB 확보 후 통합 테스트로 재도입 예정.
+- 백엔드는 기동 시 DB 연결이 필수다(JPA+Flyway). DB 없이 실행하면 기동 실패가 정상 동작이다.
+- Spring Boot 4에서 Flyway는 `flyway-core` 직접 의존이 아니라 `spring-boot-starter-flyway`를
+  사용해야 자동 실행된다 (미사용 시 마이그레이션이 조용히 생략됨 — 실측으로 확인).
+- V1 마이그레이션 첫 구문에서 `CREATE EXTENSION IF NOT EXISTS postgis`를 수행한다.
+  DB 계정에 권한이 없으면 database/setup/01-enable-postgis.sql을 관리자로 실행할 것.
 
 ## Phase 3 이후
 
