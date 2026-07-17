@@ -2,6 +2,7 @@
 
 import io
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -15,6 +16,9 @@ from app.model.train import train_model
 
 router = APIRouter(prefix="/models", tags=["models"])
 
+# 모델명 허용 형식 (경로 조작 방지: 영숫자/언더스코어/하이픈/점, 최대 64자)
+_MODEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
 # 추론 시 모델 로드 캐시 (모델명 → Predictor)
 _predictor_cache: dict[str, Predictor] = {}
 
@@ -23,9 +27,21 @@ def _models_root() -> Path:
     return Path(get_settings().models_dir)
 
 
+def _safe_model_dir(model_name: str) -> Path:
+    """모델명을 검증하고 models_dir 내부 경로임을 보장한다 (경로 조작 방지)."""
+    if not _MODEL_NAME_PATTERN.fullmatch(model_name) or ".." in model_name:
+        raise HTTPException(status_code=400,
+                            detail="모델명은 영숫자, '_', '-', '.'만 사용할 수 있습니다")
+    root = _models_root().resolve()
+    model_dir = (root / model_name).resolve()
+    if not model_dir.is_relative_to(root):
+        raise HTTPException(status_code=400, detail="허용되지 않는 모델 경로입니다")
+    return model_dir
+
+
 def _load_predictor(model_name: str) -> Predictor:
     if model_name not in _predictor_cache:
-        model_dir = _models_root() / model_name
+        model_dir = _safe_model_dir(model_name)
         if not model_dir.exists():
             raise HTTPException(status_code=404,
                                 detail=f"모델을 찾을 수 없습니다: {model_name}")
@@ -58,7 +74,7 @@ def list_models() -> ApiResponse:
 @router.get("/{model_name}/metrics")
 def model_metrics(model_name: str) -> ApiResponse:
     """모델의 테스트 성능지표 (회귀 + 등급 분류)."""
-    metrics_path = _models_root() / model_name / "metrics.json"
+    metrics_path = _safe_model_dir(model_name) / "metrics.json"
     if not metrics_path.exists():
         raise HTTPException(status_code=404,
                             detail=f"성능지표가 없습니다: {model_name}")
@@ -85,8 +101,14 @@ def train(request: TrainRequest) -> ApiResponse:
     scripts/train_model.py CLI 사용을 권장한다.
     """
     settings = get_settings()
-    dataset_dir = request.dataset_dir or settings.default_dataset_dir
-    if not Path(dataset_dir).exists():
+    _safe_model_dir(request.model_name)  # 모델명 검증 (경로 조작 방지)
+    dataset_dir = Path(request.dataset_dir or settings.default_dataset_dir)
+    # 데이터셋은 data_dir 내부 경로만 허용 (경로 조작 방지)
+    data_root = Path(settings.data_dir).resolve()
+    if not dataset_dir.resolve().is_relative_to(data_root):
+        raise HTTPException(status_code=400,
+                            detail="데이터셋은 data 디렉터리 내부 경로만 허용됩니다")
+    if not dataset_dir.exists():
         raise HTTPException(status_code=400,
                             detail=f"데이터셋 디렉터리가 없습니다: {dataset_dir}")
     try:

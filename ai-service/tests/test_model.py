@@ -120,3 +120,38 @@ class TestPredictApi:
         res = client.get("/models/smoke_test_model/metrics")
         assert res.status_code == 200
         assert "mae" in res.json()["data"]
+
+    # --- 경로 조작(Path Traversal) 방어 ---
+
+    @pytest.mark.parametrize("bad_name", [
+        "..", "..%2F..%2Fetc", "a" * 65, "한글모델", "name with space",
+    ])
+    def test_metrics_rejects_invalid_model_name(self, client, bad_name):
+        res = client.get(f"/models/{bad_name}/metrics")
+        assert res.status_code in (400, 404)
+        if res.status_code == 400:
+            assert res.json()["success"] is False
+
+    def test_predict_rejects_traversal_model_name(self, client):
+        # ".."이 포함된 모델명은 검증 단계에서 400으로 거부되어야 한다
+        res = client.post(
+            "/models/..smoke_test_model/predict",
+            files={"image": ("t.png", self._image_bytes(), "image/png")},
+            data={"temperature": 24.0, "humidity": 60.0, "wind_speed": 2.0})
+        assert res.status_code == 400
+
+    def test_predict_encoded_slash_never_reaches_handler(self, client):
+        # 인코딩된 경로 구분자는 라우팅 단계에서 404로 차단된다 (안전한 거부)
+        res = client.post(
+            "/models/%2E%2E%2Fsmoke_test_model/predict",
+            files={"image": ("t.png", self._image_bytes(), "image/png")},
+            data={"temperature": 24.0, "humidity": 60.0, "wind_speed": 2.0})
+        assert res.status_code in (400, 404)
+
+    def test_train_rejects_dataset_outside_data_dir(self, client):
+        res = client.post("/models/train", json={
+            "model_name": "traversal_test",
+            "dataset_dir": "C:/Windows/System32",
+            "epochs": 1})
+        assert res.status_code == 400
+        assert res.json()["success"] is False
