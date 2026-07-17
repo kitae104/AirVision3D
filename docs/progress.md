@@ -14,7 +14,7 @@
 | 2 | 데이터베이스 및 샘플 데이터 | VERIFIED | 원격 DB에서 Flyway 적용·CRUD·PostGIS 검증 완료(2026-07-17). JWT/CSV는 후속 |
 | 3 | IDW 보간 | VERIFIED | 단위 테스트 + Python 교차검증(1e-6) + 실 DB API 검증 완료(2026-07-17). Modified IDW는 선택 |
 | 4 | AI 데이터 파이프라인 | VERIFIED | 전처리·분할·Dataset 테스트 25건 통과, 샘플 120장 생성·DataLoader 확인(2026-07-17) |
-| 5 | AI 모델 학습과 추론 | NOT_STARTED | |
+| 5 | AI 모델 학습과 추론 | VERIFIED | 학습 CLI·추론 API·지표 6종 실검증 완료(2026-07-18). Spring 연동은 후속 |
 | 6 | 웹 대시보드 | NOT_STARTED | |
 | 7 | CesiumJS 지도 | NOT_STARTED | |
 | 8 | 시계열 시각화 | NOT_STARTED | |
@@ -120,7 +120,30 @@
 - 합성 데이터는 파이프라인 검증용이다. 실데이터 성능과 구분해 보고서에 기술할 것.
 - AI 의존성 추가: torch 2.13(CPU), torchvision 0.28, numpy, pandas, pillow
 
-## Phase 5 이후
+## Phase 5. AI 모델 학습과 추론 — VERIFIED (2026-07-18)
+
+- [x] ResNet18 멀티모달 회귀 모델 (이미지 512차원 + 환경 3차원 → PM2.5 1개) — VERIFIED
+- [x] ImageNet 사전학습 가중치 사용 여부 설정 가능 (--pretrained / API pretrained) — COMPLETED
+      (기본 False로 검증. pretrained=True는 최초 실행 시 가중치 다운로드 필요)
+- [x] 학습 스크립트 (scripts/train_model.py CLI + POST /models/train 동기 API) — VERIFIED
+- [x] 평가: MAE·RMSE·MAPE·R²(회귀) / 등급 정확도·혼동행렬(분류) 구분 산출 — VERIFIED
+- [x] 등급 계산: config/grades.json 설정 파일 관리 (좋음≤15/보통≤35/나쁨≤75/매우나쁨) — VERIFIED
+- [x] 모델 저장/로드: model.pt(weights_only)+config+scaler+history+metrics — VERIFIED
+- [x] 추론 API: POST /models/{name}/predict (multipart 이미지+환경값) — VERIFIED
+- [x] 모델 목록/성능 조회 API: GET /models, GET /models/{name}/metrics — VERIFIED
+- [x] pytest 52건 통과 (1 epoch smoke, Predictor, API 404 포함)
+- [x] 실검증: 샘플 120장 5 epochs CPU 학습(~2분) → 추론 pm25=31.94 '보통' 응답 확인
+- [ ] Spring Boot 연동 (predictions 테이블 저장) — 다음 작업
+- [ ] 선택 실험 (EfficientNet 비교, 전이학습/ROI/보정 전후 비교) — 선택 기능
+
+### 참고
+
+- 샘플 학습 지표(MAE 11.9, R² -0.84)는 합성 120장·5 epochs 결과로 **파이프라인 검증용**이다.
+  실데이터 성능으로 인용 금지. 모델 파일(*.pt)은 git 미포함 — 재생성:
+  `cd ai-service; .venv\Scripts\python scripts/train_model.py --epochs 5`
+- 서버 검증 시 localhost 대신 127.0.0.1 사용 권장 (Windows IPv6 해석 지연 이슈)
+
+## Phase 6 이후
 
 implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
 

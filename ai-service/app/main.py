@@ -1,19 +1,28 @@
-"""AirVision 3D AI Service 진입점.
+"""AirVision 3D AI Service 진입점."""
 
-Phase 1: 헬스체크만 제공한다.
-Phase 4~5에서 전처리/학습/추론 라우터를 추가한다.
-"""
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 
-from fastapi import FastAPI
-
+from app.api.models_router import router as models_router
 from app.common.response import ApiResponse
 from app.core.config import get_settings
 
 app = FastAPI(
     title="AirVision 3D AI Service",
     description="이미지 전처리, AI 학습·추론을 담당하는 서비스",
-    version="0.1.0",
+    version="0.2.0",
 )
+
+app.include_router(models_router)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    """오류도 공통 응답 형식으로 반환한다."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ApiResponse.error(str(exc.detail)).model_dump(),
+    )
 
 
 @app.get("/health")

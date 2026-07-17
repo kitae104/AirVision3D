@@ -1,0 +1,9 @@
+{
+  "_comment": "한국 환경부 PM2.5 등급 기준 (μg/m³). upper가 null이면 상한 없음.",
+  "grades": [
+    { "name": "좋음",      "upper": 15 },
+    { "name": "보통",      "upper": 35 },
+    { "name": "나쁨",      "upper": 75 },
+    { "name": "매우나쁨",  "upper": null }
+  ]
+}
