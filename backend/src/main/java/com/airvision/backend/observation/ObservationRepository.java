@@ -29,6 +29,46 @@ public interface ObservationRepository
         Instant getObservedAt();
     }
 
+    /** 관측 데이터가 존재하는 시간 범위 (시계열 조회 기본값용). */
+    interface TimeRange {
+        Instant getMinTime();
+
+        Instant getMaxTime();
+    }
+
+    @Query("SELECT MIN(o.observedAt) AS minTime, MAX(o.observedAt) AS maxTime FROM Observation o")
+    TimeRange findObservedTimeRange();
+
+    /** 기간 내 관측소별 PM2.5 시계열 (3D 시계열 시각화용). */
+    interface SeriesRow {
+        Long getSiteId();
+
+        String getSiteName();
+
+        Double getLatitude();
+
+        Double getLongitude();
+
+        Instant getObservedAt();
+
+        Double getPm25();
+    }
+
+    @Query(value = """
+            SELECT o.site_id     AS siteId,
+                   s.name        AS siteName,
+                   s.latitude    AS latitude,
+                   s.longitude   AS longitude,
+                   o.observed_at AS observedAt,
+                   o.pm25        AS pm25
+            FROM observations o
+            JOIN observation_sites s ON s.id = o.site_id
+            WHERE o.pm25 IS NOT NULL
+              AND o.observed_at BETWEEN :from AND :to
+            ORDER BY o.site_id, o.observed_at
+            """, nativeQuery = true)
+    List<SeriesRow> findSeries(@Param("from") Instant from, @Param("to") Instant to);
+
     /** 시간별 평균 PM2.5 (대시보드 차트용). */
     interface HourlyAvg {
         Instant getHour();

@@ -17,7 +17,7 @@
 | 5 | AI 모델 학습과 추론 | VERIFIED | 학습 CLI·추론 API·지표 6종 실검증 완료(2026-07-18). Spring 연동은 후속 |
 | 6 | 웹 대시보드 | COMPLETED | 화면 8종+JWT 인증 구현, 빌드·API 흐름 검증 완료. 브라우저 육안 확인만 대기(2026-07-18) |
 | 7 | CesiumJS 지도 | COMPLETED | 3D 레이어·격자·팝업·토글·카메라 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
-| 8 | 시계열 시각화 | NOT_STARTED | |
+| 8 | 시계열 시각화 | COMPLETED | 시계열 API·Clock/Timeline·시간별 색상/라벨 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
 | 9 | 통합 테스트와 배포 | NOT_STARTED | |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
@@ -211,7 +211,28 @@
 
 - 번들 크기 경고(Cesium 포함 4.7MB, gzip 1.3MB). 필요 시 MapPage lazy import로 코드 분할 예정.
 
-## Phase 8 이후
+## Phase 8. 시계열 시각화 — COMPLETED (2026-07-18)
+
+### 백엔드 (VERIFIED)
+
+- [x] GET /api/viz/observations/time-range — 데이터 존재 범위 반환 (7/10~7/17 확인)
+- [x] GET /api/viz/observations/series?from&to — 기간 내 관측소별 PM2.5 시계열
+      (7개 관측소 × 시간당 샘플 확인, 최대 7일 제한, from>to·기간 초과 시 400) — VERIFIED
+
+### 프론트엔드 (COMPLETED — 브라우저 육안 확인 대기)
+
+- [x] Cesium Clock/Timeline 연동 (Viewer animation·timeline 위젯 활성화) — COMPLETED
+- [x] 시간에 따른 격자 색상 변경: TimeIntervalCollectionProperty(1시간 구간) — COMPLETED
+- [x] 시간에 따른 라벨 변경: 관측소명 + 시각별 PM2.5·등급 — COMPLETED
+- [x] 재생/일시정지/배속: Cesium 애니메이션 위젯 (기본 배속 900 = 1초당 15분) — COMPLETED
+- [x] 날짜·시간 범위 선택: datetime-local 2개 + [시계열 로드], 기본값은 데이터 마지막 24시간 — COMPLETED
+- [x] 데이터 없는 시간 처리: entity availability로 해당 구간 격자 숨김 — COMPLETED
+- [x] [현재값 보기]로 최신값 모드 복귀 — COMPLETED
+- [x] npm run build 통과 — VERIFIED
+- [ ] 브라우저 육안 확인 — 사용자 확인 필요: /map에서 기간 선택 → 시계열 로드 → 재생 시
+      격자 색·라벨 변화 확인
+
+## Phase 9
 
 implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
 

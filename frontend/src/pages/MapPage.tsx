@@ -6,7 +6,7 @@ import type { ApiResponse, InterpolationResult, PageResponse, Site } from '../ap
 import { GRADES, gradeOf } from '../config/grades'
 import { MAP_CONFIG } from '../config/mapConfig'
 
-/** 시각화 API 응답 공통 형태 (관측/예측 레이어) */
+/** 시각화 API 응답 (관측/예측 최신값) */
 interface VizPoint {
   siteId: number
   siteName: string
@@ -18,6 +18,15 @@ interface VizPoint {
   predictedAt?: string
 }
 
+/** 시계열 API 응답 (관측소별 샘플 목록) */
+interface SeriesSite {
+  siteId: number
+  siteName: string
+  latitude: number
+  longitude: number
+  samples: { time: string; pm25: number }[]
+}
+
 type LayerKey = 'observation' | 'prediction' | 'interpolation'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
@@ -26,63 +35,74 @@ const LAYER_LABELS: Record<LayerKey, string> = {
   interpolation: 'IDW 보간값',
 }
 
-/** PM2.5 값 → 등급 색상 (Cesium Color) */
+/** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
+const SAMPLE_DURATION_SEC = 3600
+
 function pm25Color(pm25: number, alpha: number): Cesium.Color {
   return Cesium.Color.fromCssColorString(gradeOf(pm25).chart).withAlpha(alpha)
 }
 
-/** 팝업(InfoBox) HTML 생성. 지점명은 InfoBox 제목(entity.name)으로 표시된다. */
-function buildDescription(type: string, _name: string, pm25: number, time: string | undefined,
+/** 팝업(InfoBox) HTML. 지점명은 InfoBox 제목(entity.name)으로 표시된다. */
+function buildDescription(type: string, pm25: number | null, time: string | undefined,
                           lat: number, lng: number): string {
-  const grade = gradeOf(pm25)
+  const gradeRow = pm25 != null
+    ? `<tr><th>PM2.5</th><td><b>${pm25.toFixed(1)}</b> ㎍/㎥ (${gradeOf(pm25).name})</td></tr>`
+    : ''
   return `
     <table class="cesium-infoBox-defaultTable"><tbody>
       <tr><th>구분</th><td>${type}</td></tr>
-      <tr><th>PM2.5</th><td><b>${pm25.toFixed(1)}</b> ㎍/㎥ (${grade.name})</td></tr>
-      <tr><th>기준 시각</th><td>${time ? new Date(time).toLocaleString('ko-KR') : '-'}</td></tr>
+      ${gradeRow}
+      <tr><th>기준 시각</th><td>${time ? new Date(time).toLocaleString('ko-KR') : '시계열 (Timeline 참조)'}</td></tr>
       <tr><th>좌표</th><td>${lat.toFixed(4)}, ${lng.toFixed(4)}</td></tr>
     </tbody></table>`
 }
 
-/** 지점 주변 3x3x2 반투명 박스 격자를 데이터소스에 추가 */
-function addGrid(ds: Cesium.CustomDataSource, lng: number, lat: number, pm25: number,
-                 name: string, type: string) {
+/** 격자 박스 중심 좌표 목록 계산 */
+function gridPositions(lng: number, lat: number) {
   const g = MAP_CONFIG.grid
-  // 위경도 1도당 미터 근사 (수도권 위도 기준)
   const mPerDegLat = 111_320
   const mPerDegLng = 111_320 * Math.cos((lat * Math.PI) / 180)
-
+  const positions: { lng: number; lat: number; alt: number; center: boolean }[] = []
   for (let ix = 0; ix < g.countX; ix++) {
     for (let iy = 0; iy < g.countY; iy++) {
       for (let iz = 0; iz < g.countZ; iz++) {
-        const dx = (ix - (g.countX - 1) / 2) * g.spacing
-        const dy = (iy - (g.countY - 1) / 2) * g.spacing
-        const altitude = g.baseAltitude + iz * g.levelGap
-        ds.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(
-            lng + dx / mPerDegLng,
-            lat + dy / mPerDegLat,
-            altitude,
-          ),
-          box: {
-            dimensions: new Cesium.Cartesian3(g.boxSize, g.boxSize, g.boxHeight),
-            material: pm25Color(pm25, MAP_CONFIG.boxAlpha),
-            outline: ix === 1 && iy === 1,
-            outlineColor: pm25Color(pm25, 0.8),
-          },
-          name: `${name} 미세먼지 격자`,
-          description: buildDescription(type, name, pm25, undefined, lat, lng),
+        positions.push({
+          lng: lng + ((ix - (g.countX - 1) / 2) * g.spacing) / mPerDegLng,
+          lat: lat + ((iy - (g.countY - 1) / 2) * g.spacing) / mPerDegLat,
+          alt: g.baseAltitude + iz * g.levelGap,
+          center: ix === (g.countX - 1) / 2 && iy === (g.countY - 1) / 2,
         })
       }
     }
   }
+  return positions
 }
 
-/** 지점 마커(포인트 + 라벨) 추가 */
-function addMarker(ds: Cesium.CustomDataSource, p: { latitude: number; longitude: number },
-                   name: string, color: string, description: string) {
+/** 정적(현재값) 격자 추가 */
+function addStaticGrid(ds: Cesium.CustomDataSource, lng: number, lat: number, pm25: number,
+                       name: string, type: string) {
+  for (const pos of gridPositions(lng, lat)) {
+    ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, pos.alt),
+      box: {
+        dimensions: new Cesium.Cartesian3(
+          MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxHeight),
+        material: pm25Color(pm25, MAP_CONFIG.boxAlpha),
+        outline: pos.center,
+        outlineColor: pm25Color(pm25, 0.8),
+      },
+      name: `${name} 미세먼지 격자`,
+      description: buildDescription(type, pm25, undefined, lat, lng),
+    })
+  }
+}
+
+/** 지점 마커(포인트+라벨) 추가. labelText에 Property를 주면 시간에 따라 변한다. */
+function addMarker(ds: Cesium.CustomDataSource, lng: number, lat: number, name: string,
+                   color: string, description: string,
+                   labelText?: Cesium.Property | string) {
   ds.entities.add({
-    position: Cesium.Cartesian3.fromDegrees(p.longitude, p.latitude, 10),
+    position: Cesium.Cartesian3.fromDegrees(lng, lat, 10),
     point: {
       pixelSize: 12,
       color: Cesium.Color.fromCssColorString(color),
@@ -91,7 +111,7 @@ function addMarker(ds: Cesium.CustomDataSource, p: { latitude: number; longitude
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
     },
     label: {
-      text: name,
+      text: (labelText ?? name) as string,
       font: '13px sans-serif',
       fillColor: Cesium.Color.WHITE,
       outlineColor: Cesium.Color.BLACK,
@@ -105,6 +125,81 @@ function addMarker(ds: Cesium.CustomDataSource, p: { latitude: number; longitude
   })
 }
 
+/**
+ * 시계열 격자 추가: 샘플별 1시간 구간의 색상/라벨을 TimeIntervalCollectionProperty로 구성.
+ * 데이터가 없는 시간은 entity availability로 숨긴다 (완료 조건: 데이터 없는 시간 처리).
+ */
+function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite) {
+  const colorProp = new Cesium.TimeIntervalCollectionProperty()
+  const outlineProp = new Cesium.TimeIntervalCollectionProperty()
+  const labelProp = new Cesium.TimeIntervalCollectionProperty()
+  const availability = new Cesium.TimeIntervalCollection()
+
+  for (const sample of site.samples) {
+    const start = Cesium.JulianDate.fromIso8601(sample.time)
+    const stop = Cesium.JulianDate.addSeconds(start, SAMPLE_DURATION_SEC, new Cesium.JulianDate())
+    const opts = { start, stop, isStartIncluded: true, isStopIncluded: false }
+    colorProp.intervals.addInterval(
+      new Cesium.TimeInterval({ ...opts, data: pm25Color(sample.pm25, MAP_CONFIG.boxAlpha) }))
+    outlineProp.intervals.addInterval(
+      new Cesium.TimeInterval({ ...opts, data: pm25Color(sample.pm25, 0.8) }))
+    labelProp.intervals.addInterval(
+      new Cesium.TimeInterval({
+        ...opts,
+        data: `${site.siteName}\n${sample.pm25.toFixed(1)}㎍/㎥ ${gradeOf(sample.pm25).name}`,
+      }))
+    availability.addInterval(new Cesium.TimeInterval(opts))
+  }
+
+  // 시간에 따라 값이 변하는 라벨 마커
+  ds.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(site.longitude, site.latitude, 10),
+    point: {
+      pixelSize: 12,
+      color: Cesium.Color.fromCssColorString(MAP_CONFIG.markers.observation),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+    label: {
+      text: labelProp,
+      font: '13px sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -18),
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      showBackground: false,
+    },
+    name: site.siteName,
+    description: buildDescription('관측값 시계열', null, undefined, site.latitude, site.longitude),
+  })
+
+  // 시간에 따라 색이 변하는 격자
+  for (const pos of gridPositions(site.longitude, site.latitude)) {
+    ds.entities.add({
+      availability,
+      position: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, pos.alt),
+      box: {
+        dimensions: new Cesium.Cartesian3(
+          MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxHeight),
+        material: new Cesium.ColorMaterialProperty(colorProp),
+        outline: pos.center,
+        outlineColor: outlineProp,
+      },
+      name: `${site.siteName} 미세먼지 격자`,
+      description: buildDescription('관측값 시계열', null, undefined, site.latitude, site.longitude),
+    })
+  }
+}
+
+/** Date → datetime-local 입력값 (로컬 타임존) */
+function toLocalInput(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`
+}
+
 export default function MapPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
@@ -116,10 +211,115 @@ export default function MapPage() {
     prediction: true,
     interpolation: true,
   })
+  const [mode, setMode] = useState<'current' | 'series'>('current')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Viewer 생성 + 데이터 로드
+  /** 현재값 모드 데이터 로드 */
+  const loadCurrent = async () => {
+    const ds = dataSourcesRef.current
+    const viewer = viewerRef.current
+    if (!ds || !viewer) return
+    setLoading(true)
+    setError(null)
+    try {
+      const [obsRes, predRes, idwRes] = await Promise.all([
+        apiClient.get<ApiResponse<VizPoint[]>>('/viz/observations/latest'),
+        apiClient.get<ApiResponse<VizPoint[]>>('/viz/predictions/latest'),
+        apiClient.get<ApiResponse<PageResponse<InterpolationResult>>>('/interpolations?size=100'),
+      ])
+      Object.values(ds).forEach((d) => d.entities.removeAll())
+
+      for (const o of obsRes.data.data) {
+        addMarker(ds.observation, o.longitude, o.latitude, o.siteName,
+          MAP_CONFIG.markers.observation,
+          buildDescription('관측값', o.pm25, o.observedAt, o.latitude, o.longitude))
+        addStaticGrid(ds.observation, o.longitude, o.latitude, o.pm25, o.siteName, '관측값')
+      }
+      for (const p of predRes.data.data) {
+        addMarker(ds.prediction, p.longitude, p.latitude, `${p.siteName} (예측)`,
+          MAP_CONFIG.markers.prediction,
+          buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude))
+        addStaticGrid(ds.prediction, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값')
+      }
+      const seen = new Set<string>()
+      for (const r of idwRes.data.data.content) {
+        const key = `${r.latitude.toFixed(4)},${r.longitude.toFixed(4)}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        const name = r.targetName ?? `보간지점 ${r.id}`
+        addMarker(ds.interpolation, r.longitude, r.latitude, name,
+          MAP_CONFIG.markers.interpolation,
+          buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude))
+        ds.interpolation.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(
+            r.longitude, r.latitude, MAP_CONFIG.grid.baseAltitude),
+          box: {
+            dimensions: new Cesium.Cartesian3(
+              MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxHeight),
+            material: pm25Color(r.pm25, MAP_CONFIG.boxAlpha),
+            outline: true,
+            outlineColor: pm25Color(r.pm25, 0.8),
+          },
+          name,
+          description: buildDescription('IDW 보간값', r.pm25, r.interpolatedAt,
+            r.latitude, r.longitude),
+        })
+      }
+      viewer.clock.shouldAnimate = false
+      setMode('current')
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /** 시계열 모드 데이터 로드 + Clock/Timeline 설정 */
+  const loadSeries = async () => {
+    const ds = dataSourcesRef.current
+    const viewer = viewerRef.current
+    if (!ds || !viewer || !from || !to) return
+    setLoading(true)
+    setError(null)
+    try {
+      const fromIso = new Date(from).toISOString()
+      const toIso = new Date(to).toISOString()
+      const res = await apiClient.get<ApiResponse<SeriesSite[]>>(
+        `/viz/observations/series?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`)
+      if (res.data.data.length === 0) {
+        setError('선택한 기간에 관측 데이터가 없습니다')
+        return
+      }
+
+      // 시계열은 관측 레이어에 표시 (예측/보간 레이어는 최신값 유지)
+      ds.observation.entities.removeAll()
+      for (const site of res.data.data) {
+        addTimeSeriesSite(ds.observation, site)
+      }
+
+      // Cesium Clock / Timeline 설정 (재생·일시정지·배속은 애니메이션 위젯 제공)
+      const start = Cesium.JulianDate.fromIso8601(fromIso)
+      const stop = Cesium.JulianDate.fromIso8601(toIso)
+      viewer.clock.startTime = start.clone()
+      viewer.clock.stopTime = stop.clone()
+      viewer.clock.currentTime = start.clone()
+      viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP
+      viewer.clock.multiplier = 900 // 1초당 15분 (1시간 데이터가 4초에 재생)
+      viewer.clock.shouldAnimate = true
+      viewer.timeline?.zoomTo(start, stop)
+      setMode('series')
+      setLayers((prev) => ({ ...prev, observation: true }))
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Viewer 생성 (1회)
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return
 
@@ -127,7 +327,6 @@ export default function MapPage() {
     if (ionToken) Cesium.Ion.defaultAccessToken = ionToken
 
     const viewer = new Cesium.Viewer(containerRef.current, {
-      // ion 토큰이 없으면 OSM 타일로 폴백 (토큰 없이도 동작 보장)
       baseLayer: ionToken
         ? undefined
         : Cesium.ImageryLayer.fromProviderAsync(
@@ -142,11 +341,12 @@ export default function MapPage() {
       homeButton: false,
       sceneModePicker: false,
       navigationHelpButton: false,
-      animation: false,
-      timeline: false,
+      animation: true, // 재생/일시정지/배속 위젯
+      timeline: true,
       fullscreenButton: true,
     })
     viewer.scene.globe.depthTestAgainstTerrain = false
+    viewer.clock.shouldAnimate = false
     viewerRef.current = viewer
 
     const dataSources: Record<LayerKey, Cesium.CustomDataSource> = {
@@ -154,7 +354,7 @@ export default function MapPage() {
       prediction: new Cesium.CustomDataSource('prediction'),
       interpolation: new Cesium.CustomDataSource('interpolation'),
     }
-    Object.values(dataSources).forEach((ds) => viewer.dataSources.add(ds))
+    Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
 
     viewer.camera.setView({
@@ -165,63 +365,29 @@ export default function MapPage() {
       ),
     })
 
-    // 데이터 로드
-    Promise.all([
-      apiClient.get<ApiResponse<Site[]>>('/sites'),
-      apiClient.get<ApiResponse<VizPoint[]>>('/viz/observations/latest'),
-      apiClient.get<ApiResponse<VizPoint[]>>('/viz/predictions/latest'),
-      apiClient.get<ApiResponse<PageResponse<InterpolationResult>>>('/interpolations?size=100'),
-    ])
-      .then(([siteRes, obsRes, predRes, idwRes]) => {
-        setSites(siteRes.data.data)
-
-        // 관측 레이어: 마커 + 격자
-        for (const o of obsRes.data.data) {
-          addMarker(dataSources.observation, o, o.siteName, MAP_CONFIG.markers.observation,
-            buildDescription('관측값', o.siteName, o.pm25, o.observedAt, o.latitude, o.longitude))
-          addGrid(dataSources.observation, o.longitude, o.latitude, o.pm25, o.siteName, '관측값')
-        }
-
-        // 예측 레이어: 마커 + 격자 (관측과 겹치지 않게 마커만 다른 색)
-        for (const p of predRes.data.data) {
-          addMarker(dataSources.prediction, p, `${p.siteName} (예측)`, MAP_CONFIG.markers.prediction,
-            buildDescription('AI 예측값', p.siteName, p.pm25, p.predictedAt, p.latitude, p.longitude))
-          addGrid(dataSources.prediction, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값')
-        }
-
-        // 보간 레이어: 마커 + 단일 박스 (중복 지점은 최신 1건만)
-        const seen = new Set<string>()
-        for (const r of idwRes.data.data.content) {
-          const key = `${r.latitude.toFixed(4)},${r.longitude.toFixed(4)}`
-          if (seen.has(key)) continue
-          seen.add(key)
-          const name = r.targetName ?? `보간지점 ${r.id}`
-          addMarker(dataSources.interpolation, r, name, MAP_CONFIG.markers.interpolation,
-            buildDescription('IDW 보간값', name, r.pm25, r.interpolatedAt, r.latitude, r.longitude))
-          dataSources.interpolation.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(
-              r.longitude, r.latitude, MAP_CONFIG.grid.baseAltitude),
-            box: {
-              dimensions: new Cesium.Cartesian3(
-                MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxHeight),
-              material: pm25Color(r.pm25, MAP_CONFIG.boxAlpha),
-              outline: true,
-              outlineColor: pm25Color(r.pm25, 0.8),
-            },
-            name,
-            description: buildDescription('IDW 보간값', name, r.pm25, r.interpolatedAt,
-              r.latitude, r.longitude),
-          })
+    // 관측소 목록 + 시계열 기본 기간(데이터 범위 마지막 24시간) + 현재값 로드
+    apiClient.get<ApiResponse<Site[]>>('/sites').then((res) => setSites(res.data.data))
+    apiClient
+      .get<ApiResponse<{ from: string | null; to: string | null }>>('/viz/observations/time-range')
+      .then((res) => {
+        const range = res.data.data
+        if (range.to) {
+          const end = new Date(range.to)
+          const begin = new Date(Math.max(
+            new Date(range.from ?? range.to).getTime(),
+            end.getTime() - 24 * 3600 * 1000))
+          setFrom(toLocalInput(begin))
+          setTo(toLocalInput(end))
         }
       })
-      .catch((err) => setError(errorMessage(err)))
-      .finally(() => setLoading(false))
+    loadCurrent()
 
     return () => {
       viewer.destroy()
       viewerRef.current = null
       dataSourcesRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 레이어 표시/숨김
@@ -288,6 +454,45 @@ export default function MapPage() {
             </span>
           ))}
         </div>
+      </div>
+
+      {/* 시계열 컨트롤 */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm">
+        <span className="font-medium text-gray-700">시계열 재생</span>
+        <input
+          type="datetime-local"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          className="rounded-md border border-gray-300 px-2 py-1"
+        />
+        <span className="text-gray-400">~</span>
+        <input
+          type="datetime-local"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          className="rounded-md border border-gray-300 px-2 py-1"
+        />
+        <button
+          onClick={loadSeries}
+          disabled={loading || !from || !to}
+          className="rounded-md bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          시계열 로드
+        </button>
+        {mode === 'series' && (
+          <button
+            onClick={loadCurrent}
+            disabled={loading}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-gray-600 hover:bg-gray-100"
+          >
+            현재값 보기
+          </button>
+        )}
+        <span className="text-xs text-gray-400">
+          {mode === 'series'
+            ? '좌측 하단 위젯으로 재생·일시정지·배속, 하단 Timeline으로 시간 이동'
+            : '기간 선택 후 [시계열 로드]를 누르면 시간 재생 모드로 전환됩니다'}
+        </span>
       </div>
 
       {error && <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
