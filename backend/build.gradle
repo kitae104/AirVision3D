@@ -25,6 +25,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	implementation 'org.flywaydb:flyway-database-postgresql'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
+	// MultipartBodyBuilder(AI 서비스 이미지 전송)가 참조하는 Publisher 클래스 제공
+	implementation 'org.reactivestreams:reactive-streams:1.0.4'
 	runtimeOnly 'org.postgresql:postgresql'
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'

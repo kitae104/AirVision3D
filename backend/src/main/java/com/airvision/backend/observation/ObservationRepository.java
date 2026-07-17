@@ -11,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 public interface ObservationRepository
         extends JpaRepository<Observation, Long>, JpaSpecificationExecutor<Observation> {
 
+    /** 특정 관측소의 최신 관측값 (예측 결과의 actual_pm25 채움용). */
+    java.util.Optional<Observation> findFirstBySite_IdOrderByObservedAtDesc(Long siteId);
+
     /** 관측소별 최신 PM2.5 (기준 시각 이전, pm25 존재 건만). IDW 보간의 관측지점 입력으로 사용. */
     interface SitePm25 {
         Long getSiteId();

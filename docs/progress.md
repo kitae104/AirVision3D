@@ -133,7 +133,14 @@
 - [x] 모델 목록/성능 조회 API: GET /models, GET /models/{name}/metrics — VERIFIED
 - [x] pytest 52건 통과 (1 epoch smoke, Predictor, API 404 포함)
 - [x] 실검증: 샘플 120장 5 epochs CPU 학습(~2분) → 추론 pm25=31.94 '보통' 응답 확인
-- [ ] Spring Boot 연동 (predictions 테이블 저장) — 다음 작업
+- [x] Spring Boot 연동 (predictions 테이블 저장) — VERIFIED (2026-07-18)
+      · POST /api/predictions/run (multipart 이미지+환경값) → AI 추론 → ai_models 업서트
+        → predictions 저장 (actual_pm25는 해당 관측소 최신 관측값 자동 기록)
+      · GET /api/predictions (목록·관측소 필터), GET /api/predictions/models/{name}/metrics (프록시)
+      · AI 서비스 중단 시 502 + 안내 메시지 확인. 컨트롤러 테스트 5건 포함 총 36건 통과
+      · 트러블슈팅: Boot 4 기본 JDK HttpClient가 chunked+h2c로 전송해 uvicorn이 multipart를
+        못 읽는 문제 → SimpleClientHttpRequestFactory(Content-Length 버퍼 전송)로 해결.
+        MultipartBodyBuilder는 reactive-streams 의존성 필요(추가함)
 - [ ] 선택 실험 (EfficientNet 비교, 전이학습/ROI/보정 전후 비교) — 선택 기능
 
 ### 참고
