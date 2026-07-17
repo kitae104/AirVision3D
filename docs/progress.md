@@ -13,7 +13,7 @@
 | 1 | 프로젝트 기반 구축 | VERIFIED | Docker 제외 결정(2026-07-17)으로 잔여 항목 소멸. 전 항목 로컬 검증 완료 |
 | 2 | 데이터베이스 및 샘플 데이터 | VERIFIED | 원격 DB에서 Flyway 적용·CRUD·PostGIS 검증 완료(2026-07-17). JWT/CSV는 후속 |
 | 3 | IDW 보간 | VERIFIED | 단위 테스트 + Python 교차검증(1e-6) + 실 DB API 검증 완료(2026-07-17). Modified IDW는 선택 |
-| 4 | AI 데이터 파이프라인 | NOT_STARTED | |
+| 4 | AI 데이터 파이프라인 | VERIFIED | 전처리·분할·Dataset 테스트 25건 통과, 샘플 120장 생성·DataLoader 확인(2026-07-17) |
 | 5 | AI 모델 학습과 추론 | NOT_STARTED | |
 | 6 | 웹 대시보드 | NOT_STARTED | |
 | 7 | CesiumJS 지도 | NOT_STARTED | |
@@ -72,7 +72,10 @@
       ③ geomWkt = POINT(126.978 37.5665) → PostGIS 저장·조회 확인
       ④ 관측소 등록→수정→삭제→404 왕복, 관측값 등록·필터 조회(샘플 1,184건) 확인
       ⑤ 잘못된 위도 입력 → 400, Swagger UI → 200
-- [ ] 사용자 인증(JWT), CSV 업로드 — 4주차 범위 (후속 진행)
+- [ ] 사용자 인증(JWT) — 후속 진행 (로그인 화면과 함께 Phase 6 전후 예정)
+- [ ] CSV 업로드 — **사용자 결정으로 보류(2026-07-17)**: 업로드할 실측 CSV가 아직 없음.
+      실측 데이터(예: 에어코리아) 확보 시 진행. 스키마: site_id, observed_at, pm10, pm25,
+      temperature, humidity, wind_speed, wind_direction
 
 ### 참고
 
@@ -97,7 +100,27 @@
 실 DB 검증 내용: 임의 2개 지점(서울숲 14.0185, 김포공항 17.8273) 보간 성공,
 관측소 동일 좌표 입력 시 해당 관측소 최신 실제 관측값(5.1) 그대로 반환 확인.
 
-## Phase 4 이후
+## Phase 4. AI 데이터 파이프라인 — VERIFIED (2026-07-17)
+
+- [x] 데이터셋 디렉터리 구조·CSV 스키마 정의 (app/data/schema.py, labels.csv 7컬럼) — VERIFIED
+- [x] 이미지 전처리: 리사이즈·[0,1]·ImageNet 정규화 (app/preprocessing/image_ops.py) — VERIFIED
+- [x] ROI 추출: 설정값(x,y,width,height) 기반, 범위 검증 포함 — VERIFIED
+- [x] MAD 기반 픽셀 이상치 확인·보정 (k=3.5, 1.4826 스케일) — VERIFIED
+- [x] 환경데이터 정규화: EnvScaler(z-score, train으로만 fit, JSON 저장/로드) — VERIFIED
+- [x] PyTorch Dataset/DataLoader: 이미지(3,S,S)+환경(3,)+타깃(1,) — VERIFIED
+- [x] 학습/검증/테스트 분리: **날짜 단위**(누수 방지), 시드 고정, 누수 검증 게이트 — VERIFIED
+- [x] 샘플 데이터 생성기: PM2.5 상관 안개 합성 이미지 (app/sample/generator.py + CLI) — VERIFIED
+- [x] pytest 25건 통과, 실제 생성(3관측소×5일×8장=120장, data/sample/dataset) 후
+      분할 72/24/24 및 DataLoader 배치 (8,3,224,224) 확인
+
+### 참고
+
+- 합성 데이터셋은 git에 커밋하지 않는다(.gitignore). 재생성:
+  `cd ai-service; .venv\Scripts\python scripts/generate_sample_dataset.py`
+- 합성 데이터는 파이프라인 검증용이다. 실데이터 성능과 구분해 보고서에 기술할 것.
+- AI 의존성 추가: torch 2.13(CPU), torchvision 0.28, numpy, pandas, pillow
+
+## Phase 5 이후
 
 implementation-plan.md 7절의 단계별 완료 조건을 따른다. 착수 시 본 문서에 상세 항목을 추가한다.
 

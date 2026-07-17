@@ -39,6 +39,8 @@ data/models/*
 # sample은 소용량 샘플만 커밋 허용 (대용량 파일은 개별 확인)
 data/sample/*.zip
 data/sample/*.tar.gz
+# 합성 샘플 데이터셋은 생성기로 재생성 가능하므로 커밋하지 않음
+data/sample/dataset/
 *.pt
 *.pth
 *.onnx
