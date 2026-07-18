@@ -31,6 +31,7 @@ public class KmaWeatherService {
     private final TtlCache<String, WeatherNowResponse> currentCache;
     private final TtlCache<String, WeatherForecastResponse> forecastCache;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public KmaWeatherService(KmaWeatherClient client, AirKoreaService airKoreaService,
                              PublicDataProperties publicDataProps) {
         this(client, airKoreaService, publicDataProps, Clock.systemUTC());

@@ -9,14 +9,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { Link } from 'react-router-dom'
 import { apiClient, errorMessage } from '../api/client'
 import type {
+  AirForecastEnvelope,
   ApiResponse,
+  ComparisonResult,
+  CurrentAirQuality,
   DashboardSummary,
   PageResponse,
   Prediction,
+  WeatherNow,
 } from '../api/client'
 import { gradeStyle } from '../config/grades'
+import { PUBLIC_GRADE_COLORS } from '../config/publicGrades'
 
 interface HourlyPoint {
   time: string
@@ -33,12 +39,55 @@ function StatCard({ label, value, sub }: { label: string; value: React.ReactNode
   )
 }
 
+/** 공공 등급명 배지 */
+function PublicGradeBadge({ grade }: { grade: string | null }) {
+  if (!grade) return <span className="text-gray-400">-</span>
+  const color = PUBLIC_GRADE_COLORS[grade]
+  return (
+    <span
+      className="rounded-full px-2.5 py-0.5 text-sm font-medium"
+      style={color ? { backgroundColor: `${color}22`, color } : undefined}
+    >
+      {grade}
+    </span>
+  )
+}
+
 export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [hourly, setHourly] = useState<HourlyPoint[]>([])
   const [predictions, setPredictions] = useState<Prediction[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [publicAir, setPublicAir] = useState<CurrentAirQuality | null>(null)
+  const [weather, setWeather] = useState<WeatherNow | null>(null)
+  const [forecast, setForecast] = useState<AirForecastEnvelope | null>(null)
+  const [comparison, setComparison] = useState<ComparisonResult | null>(null)
+
+  // 공공 데이터는 실패해도 대시보드 나머지에 영향을 주지 않도록 개별 로드
+  useEffect(() => {
+    apiClient.get<ApiResponse<CurrentAirQuality>>('/air-quality/current')
+      .then((res) => {
+        const data = res.data.data
+        setPublicAir(data)
+        const located = data.stations.filter((s) => s.locationAvailable)
+        if (located.length > 0) {
+          const lat = located.reduce((a, s) => a + (s.latitude ?? 0), 0) / located.length
+          const lng = located.reduce((a, s) => a + (s.longitude ?? 0), 0) / located.length
+          apiClient.get<ApiResponse<WeatherNow>>(
+            `/weather/current?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`)
+            .then((w) => setWeather(w.data.data))
+            .catch(() => setWeather(null))
+        }
+      })
+      .catch(() => setPublicAir(null))
+    apiClient.get<ApiResponse<AirForecastEnvelope>>('/air-quality/forecast?informCode=PM25')
+      .then((res) => setForecast(res.data.data))
+      .catch(() => setForecast(null))
+    apiClient.get<ApiResponse<ComparisonResult>>('/air-quality/comparison/latest')
+      .then((res) => setComparison(res.data.data))
+      .catch(() => setComparison(null))
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -94,6 +143,100 @@ export default function DashboardPage() {
         <StatCard label="관측소 수" value={summary?.siteCount ?? '-'} />
         <StatCard label="최근 예측" value={summary?.recentPredictionCount ?? '-'} sub="24시간" />
         <StatCard label="최근 보간" value={summary?.recentInterpolationCount ?? '-'} sub="24시간" />
+      </div>
+
+      {/* 공공 데이터 영역 (현재 측정 / 기상 / 대기질 예보 / AI 비교 / 시스템 상태 구분) */}
+      <div>
+        <div className="mb-2 flex items-baseline gap-3">
+          <h3 className="font-semibold text-gray-900">공공 대기질·기상</h3>
+          <span className="text-xs text-gray-400">
+            출처: 환경부·한국환경공단 AirKorea / 기상청
+          </span>
+          <Link to="/public-air" className="text-xs text-blue-600 hover:underline">
+            예보·경보 자세히 →
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {(() => {
+            const best = publicAir?.stations.find(
+              (s) => s.pm25.valid && s.pm25.value != null)
+            return (
+              <StatCard
+                label={`현재 대기질 (${publicAir?.sido ?? '-'} 실측)`}
+                value={best
+                  ? <span>{best.pm25.value} <span className="text-sm font-normal">㎍/㎥</span>{' '}
+                      <PublicGradeBadge grade={best.pm25.grade} /></span>
+                  : '-'}
+                sub={best
+                  ? `${best.stationName} · PM10 ${best.pm10.value ?? '-'} · KHAI ${best.khai.value ?? '-'}`
+                  : '실측 데이터 없음'}
+              />
+            )
+          })()}
+          <StatCard
+            label="기상 (기상청)"
+            value={weather?.temperature != null
+              ? <span>{weather.temperature}<span className="text-sm font-normal">℃</span></span>
+              : '-'}
+            sub={weather
+              ? `습도 ${weather.humidity ?? '-'}% · ${weather.windDirectionText ?? ''} ${weather.windSpeed ?? '-'}m/s · 강수 ${weather.precipitationType ?? '-'}`
+              : '기상 데이터 없음'}
+          />
+          {(() => {
+            const sido = publicAir?.sido ?? '인천'
+            const days = ['오늘', '내일', '모레']
+            return (
+              <StatCard
+                label={`대기질 예보 (PM2.5 · ${sido})`}
+                value={
+                  forecast && forecast.forecasts.length > 0 ? (
+                    <span className="flex flex-wrap items-center gap-1.5 text-sm font-normal">
+                      {forecast.forecasts.slice(0, 3).map((f, i) => {
+                        const grade = f.grades.find((g) => g.region.includes(sido))?.grade ?? null
+                        return (
+                          <span key={i} className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500">{days[i]}</span>
+                            <PublicGradeBadge grade={grade} />
+                          </span>
+                        )
+                      })}
+                    </span>
+                  ) : '-'}
+                sub="현재 측정값이 아닌 예보입니다"
+              />
+            )
+          })()}
+          {(() => {
+            const matched = comparison?.rows.filter((r) => r.matched) ?? []
+            const avgError = matched.length > 0
+              ? matched.reduce((a, r) => a + (r.absoluteError ?? 0), 0) / matched.length
+              : null
+            return (
+              <StatCard
+                label="AI 추정 vs 실측 (PM2.5)"
+                value={avgError != null
+                  ? <span>±{avgError.toFixed(1)} <span className="text-sm font-normal">㎍/㎥</span></span>
+                  : '-'}
+                sub={matched.length > 0
+                  ? `매칭 ${matched.length}건 평균 절대오차`
+                  : 'AI 예측 실행 후 비교 가능'}
+              />
+            )
+          })()}
+          <StatCard
+            label="공공 데이터 상태"
+            value={publicAir
+              ? (publicAir.mock
+                ? <span className="text-base text-amber-600">Mock 모드</span>
+                : publicAir.stale
+                  ? <span className="text-base text-orange-600">지연 데이터</span>
+                  : <span className="text-base text-green-600">정상</span>)
+              : <span className="text-base text-gray-400">연결 안 됨</span>}
+            sub={publicAir?.collectedAt
+              ? `마지막 수집 ${new Date(publicAir.collectedAt).toLocaleTimeString('ko-KR')}${publicAir.mock ? ' · 서비스키 입력 시 실 데이터' : ''}`
+              : '백엔드 공공 API 상태를 확인하세요'}
+          />
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">

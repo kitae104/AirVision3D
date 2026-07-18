@@ -38,9 +38,10 @@ public class KmaWeatherClient {
     private final boolean mock;
     private final Clock clock;
 
-    public KmaWeatherClient(KmaProperties props, PublicDataProperties publicDataProps,
-                            ObjectMapper objectMapper) {
-        this(props, publicDataProps, objectMapper,
+    @org.springframework.beans.factory.annotation.Autowired
+    public KmaWeatherClient(KmaProperties props, PublicDataProperties publicDataProps) {
+        // Boot 4 기본 구성에는 Jackson 2 ObjectMapper 빈이 없으므로 직접 생성 (SecurityConfig와 동일)
+        this(props, publicDataProps, new ObjectMapper(),
                 defaultRestClient(props.baseUrl()), Clock.systemUTC());
     }
 

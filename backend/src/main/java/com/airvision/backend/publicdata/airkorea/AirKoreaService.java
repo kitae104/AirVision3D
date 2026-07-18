@@ -57,6 +57,7 @@ public class AirKoreaService {
     private final TtlCache<String, WeeklyForecastResponse> weeklyCache;
     private final TtlCache<Integer, List<AlertResponse>> alertCache;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AirKoreaService(AirKoreaClient client, AirKoreaProperties props,
                            PublicDataProperties publicDataProps) {
         this(client, props, publicDataProps, Clock.systemUTC());

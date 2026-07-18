@@ -45,9 +45,11 @@ public class AirKoreaClient {
     private final boolean mock;
     private final Clock clock;
 
-    public AirKoreaClient(AirKoreaProperties props, PublicDataProperties publicDataProps,
-                          ObjectMapper objectMapper) {
-        this(props, publicDataProps, objectMapper,
+    @org.springframework.beans.factory.annotation.Autowired
+    public AirKoreaClient(AirKoreaProperties props, PublicDataProperties publicDataProps) {
+        // Boot 4 기본 구성에는 Jackson 2 ObjectMapper 빈이 없으므로 직접 생성한다
+        // (SecurityConfig와 동일한 이유). 원본 필드가 전부 String이라 기본 설정으로 충분하다.
+        this(props, publicDataProps, new ObjectMapper(),
                 defaultRestClient(props.baseUrl()), Clock.systemUTC());
     }
 

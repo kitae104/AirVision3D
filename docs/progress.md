@@ -261,3 +261,24 @@
 | 3 | Cesium ion 토큰 | OSM imagery 폴백 |
 | 4 | 배포 대상 | 로컬 Docker Compose 시연 |
 | 5 | 팀 숙련도 | 역할별 균등 분담 |
+
+## Phase 10. 공공 대기환경 API 연동 — COMPLETED (2026-07-18)
+
+계획: docs/implementation-plan.md "Public Air Quality API Integration" 섹션.
+상세 문서: docs/public-data-api-integration.md
+
+- [x] 공통 기반: TtlCache(장애 시 stale 폴백)·KstTimes(24:00 처리)·외부 API 예외 3종·설정 바인딩 — COMPLETED
+- [x] 1단계 AirKorea 측정소·실시간: 클라이언트(returnType=json, 이중 인코딩 방지, 1회 재시도),
+      정규화(값/-/플래그/등급, 0≠결측), Mock fixture, /api/air-quality/stations·current — COMPLETED
+- [x] 2단계 3D 지도: airkorea 레이어(등급색 원기둥 막대+정규화 높이+텍스트 등급 병기),
+      기준 오염물질 선택(PM2.5/PM10/KHAI), 데이터 없음 △ 표시, Mock·stale 배너 — COMPLETED
+- [x] 3단계 기상청: 격자 변환(LCC DFS)+발표주기 base_time, 초단기실황·예보,
+      풍향 16방위+화살표(이동 방향 반전), /api/weather/* — COMPLETED
+- [x] 4단계 예보·경보: 공공 대기질 페이지(/public-air), 활성 경보 배너, 주간예보 — COMPLETED
+- [x] 5단계 AI 비교: 최근접 유효 측정소 매칭(5km·60분), 절대오차·오차율(실측 0 생략),
+      매칭 불가 사유 반환, /api/air-quality/comparison/* — COMPLETED
+- [x] 대시보드 공공 카드 5종(현재/기상/예보/AI비교/상태), /api/public-data/status — COMPLETED
+- [x] 백엔드 테스트 63건 추가 → 총 102건 통과, 프론트 빌드·oxlint 통과 — VERIFIED (2026-07-18)
+- [x] Mock 모드 실기동 검증: 백엔드 bootRun 후 신규 15개 엔드포인트 실호출 확인 — VERIFIED (2026-07-18)
+- [ ] 실 서비스키로 실 API 응답 검증 — BLOCKED (공공데이터포털 키 발급 필요, 발급 후
+      .env에 AIRKOREA_SERVICE_KEY/KMA_SERVICE_KEY 입력만 하면 자동 전환)

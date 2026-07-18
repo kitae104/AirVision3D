@@ -4,6 +4,10 @@ AI 영상인식 기반 미세먼지 예측 및 3차원 시각화 시스템 (대�
 
 대기 이미지와 환경데이터(온도·습도·풍속)로 PM2.5 농도를 예측하고,
 **관측값 · AI 예측값 · IDW 보간값**을 CesiumJS 기반 3차원 지도에서 비교·시각화한다.
+AirKorea 실시간 대기질·예보·경보와 기상청 기상 데이터를 연동하며
+(공공데이터포털 키가 없으면 내장 Mock 데이터로 동작), AI 추정값과 공공 실측값을 비교한다.
+
+> 대기질 데이터: 환경부·한국환경공단 AirKorea · 기상 데이터: 기상청
 
 ## 기술 스택
 
@@ -156,6 +160,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\integration-test.ps1
 |---|---|
 | [user-guide.html](docs/user-guide.html) | **사용 설명서** (처음 사용하는 사람용, 브라우저로 열기) |
 | [runtime-requirements.md](docs/runtime-requirements.md) | 실행에 필요한 정보 정리 (DB·환경변수·포트·계정·준비 상태) |
+| [public-data-api-integration.md](docs/public-data-api-integration.md) | 공공 API(AirKorea·기상청) 연동 — 키 발급, Mock 모드, 내부 API, 캐시·유효성 정책 |
 | [requirements.md](docs/requirements.md) | 요구사항 정의와 구현 현황 |
 | [architecture.md](docs/architecture.md) | 시스템 아키텍처·설계 결정 |
 | [database-design.md](docs/database-design.md) | ERD·스키마 설계 |
