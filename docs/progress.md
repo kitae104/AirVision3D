@@ -3,7 +3,7 @@
 > 상태 정의: NOT_STARTED / IN_PROGRESS / BLOCKED / COMPLETED(코드 작성 완료) / VERIFIED(실행·테스트 성공 확인)
 > 갱신 규칙: 각 작업 완료 시 본 문서를 갱신한다. 테스트를 실행하지 못한 경우 사유를 기록한다.
 
-최종 갱신: 2026-07-17
+최종 갱신: 2026-07-18
 
 ## Phase 요약
 
@@ -19,6 +19,8 @@
 | 7 | CesiumJS 지도 | COMPLETED | 3D 레이어·격자·팝업·토글·카메라 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
 | 8 | 시계열 시각화 | COMPLETED | 시계열 API·Clock/Timeline·시간별 색상/라벨 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
 | 9 | 통합 테스트와 배포 | VERIFIED | 통합 테스트 29건 통과, 산출물 문서 11종 작성(2026-07-18). 브라우저 육안 확인만 잔여 |
+| 10 | 공공 대기환경 API 연동 | COMPLETED | 5단계 구현(측정소·지도·기상·예보·AI비교), 테스트 103건 통과, 실 서비스키 검증 완료 |
+| 11 | 공공 데이터 시계열 축적 루프 | VERIFIED | 실 DB 실기동 검증(2026-07-18). 트랜잭션 버그 발견·수정, 수집 208건/재수집 멱등 확인, integration-test 33건 중 32 PASS(신규 4건 전부 PASS) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -284,3 +286,84 @@
       Mock 자동 해제, 인천 실측정소 43곳·기상 실황·예보 3일·주간예보·경보 271건 정상 수신.
       실 응답 기반 보완 2건 — ① 24시간 등급 누락 측정소는 1시간 등급(pm10/pm25Grade1h)
       폴백 사용, ② 경보 numOfRows 200→1000 상향. 테스트 총 103건 통과)
+
+## Phase 11. 공공 데이터 시계열 축적 루프 — VERIFIED (2026-07-18)
+
+계획: `.superpowers/sdd/task-7-brief.md` 등 7개 태스크(TDD). V3 마이그레이션·엔티티·수집기·
+이력 조회·대시보드 차트를 실 원격 PostgreSQL에 대해 최초로 실기동 검증했다.
+
+### 구현 내용 (Task 1~6, 이전 커밋)
+
+- [x] V3 마이그레이션: `public_air_measurement`, `public_weather_observation`,
+      `comparison_history` 3개 테이블(+ 유일성 제약으로 ON CONFLICT 업서트 지원) — VERIFIED
+      (`spring.jpa.hibernate.ddl-auto: validate`로 엔티티-스키마 일치 확인, 아래 참고)
+- [x] 수집기(`PublicDataCollector`): 매시간 cron(`0 10 * * * *`) + 기동 시 1회
+      (`collect-on-startup=true`) + 수동 `POST /api/public-data/collect`(ADMIN).
+      시/도별·수집 단위별 개별 try/catch로 장애 격리, 네이티브 upsert로 멱등
+- [x] 보존 정책: 매일 03:30 cron으로 `retention-days`(기본 180일) 이전 데이터 삭제
+- [x] 조회 API: `GET /api/public-data/history/measurements/hourly`,
+      `GET /api/public-data/history/summary`, `GET /api/public-data/history/comparison`,
+      `GET /api/air-quality/comparison/history`(동일 데이터 위임)
+- [x] 대시보드: 공공 실측 추이·AI 오차 추이 차트 2종 + 누적 건수 카드
+
+### 실 DB 실기동 검증 (Task 7, 2026-07-18)
+
+- [x] `.\run.ps1`로 backend(8080)+ai-service(8000)+frontend(5173) 동시 기동,
+      3개 헬스체크 모두 OK 확인
+- [x] **V3 마이그레이션 검증**: `ddl-auto: validate`로 최초 실 DB 기동 —
+      `SchemaManagementException` 없이 정상 기동 확인 (Flyway 3개 마이그레이션 적용 로그,
+      Hibernate 스키마 검증 통과)
+- [x] **실행 중 발견한 실제 결함(수정 완료)**: 최초 기동/수동 수집 시
+      `측정 수집 실패 (서울): No active transaction for update or delete query` 경고가
+      매 시/도·매 수집 단위마다 발생, 결과적으로 `measurementsUpserted=0`,
+      `accumulatedCount=0`으로 수집이 항상 빈 값을 반환하는 버그를 실 DB 기동에서
+      최초로 발견했다(단위/슬라이스 테스트 117건은 `@DataJpaTest`류가 트랜잭션을 감싸주므로
+      이 버그를 못 잡았음). 원인: `PublicAirMeasurementRepository.upsert`,
+      `deleteByMeasuredAtBefore`, `PublicWeatherObservationRepository.upsert`,
+      `deleteByBaseTimeBefore`, `ComparisonHistoryRepository.insertSnapshot` 5개
+      `@Modifying` 네이티브 쿼리가 `@Transactional` 없이 선언되어 있고, 호출부인
+      `PublicDataCollector.collectOnce()`도 (건별 개별 커밋 의도로) 의도적으로
+      `@Transactional`을 붙이지 않아 활성 트랜잭션이 전혀 없는 상태로 실행되었기 때문.
+      수정: 5개 리포지토리 메서드 각각에 `@Transactional`을 직접 추가(리포지토리
+      인터페이스 메서드 단위 애노테이션은 Spring Data가 그대로 존중하므로, 건별로 개별
+      트랜잭션이 열리는 원래 설계 의도(코드 주석)를 그대로 유지하면서 버그만 해결).
+      수정 파일: `PublicAirMeasurementRepository.java`, `PublicWeatherObservationRepository.java`,
+      `ComparisonHistoryRepository.java`. 수정 후 `gradlew test` 117건 재검증 통과,
+      재기동 후 정상 수집 확인(아래).
+- [x] **수집·누적 검증**: admin 로그인 → `POST /api/public-data/collect` →
+      `measurementsUpserted=208`, `weatherUpserted=3`(mock=false, 실 API) →
+      `GET /api/public-data/history/summary` → `accumulatedCount=208` 확인.
+      재수집 1회 더 실행 → `accumulatedCount` 208 유지(중복 증가 없음, ON CONFLICT
+      업서트 멱등성 확인). 시간별 이력(`/history/measurements/hourly`) 2건 조회 확인.
+      (참고: `earliestCollectedAt`은 재수집 시 해당 로우들의 `collected_at`이
+      `EXCLUDED.collected_at`으로 갱신되는 설계라 "마지막 수집 시각"에 가깝게 움직인다 —
+      `accumulatedCount`가 핵심 멱등성 지표)
+- [x] `scripts/integration-test.ps1`에 8번째 블록(공공 데이터 누적 4건) 추가:
+      수동 수집 측정 1건 이상, 시간별 이력 조회, 누적 요약 건수, 오차 이력 조회 200
+- [x] **전체 통합 테스트 결과: 33건 중 32 PASS / 1 FAIL** — 신규 4건 전부 PASS.
+      기존 FAIL 1건("시간별 차트 데이터", `GET /api/dashboard/hourly?hours=24`)은
+      Phase 11과 무관한 사전 존재 이슈: Phase 2 V2 샘플 데이터가 생성 시점(2026-07-17)
+      기준 "최근 7일"로 고정 생성되어 있어, 달력일이 지나면서 `hours=24` 조회 창이
+      최신 샘플 관측(2026-07-17T14:00Z)을 벗어나 빈 배열을 반환한다(현재 기준 관측 대비
+      약 14분 초과). 코드 결함이 아니라 정적 샘플 데이터의 시간 경과에 따른 자연스러운
+      드리프트이며, Phase 11 변경으로 유발되지 않았다(버그 수정 전 최초 실행에서도 동일하게
+      실패). 재현: 샘플 데이터 재생성 또는 시연 직전 실행 시에는 정상 통과 예상.
+- [x] `.env.example`에 수집 관련 3개 변수 주석 추가
+      (`PUBLIC_DATA_COLLECTION_ENABLED`, `PUBLIC_DATA_COLLECT_ON_STARTUP`,
+      `PUBLIC_DATA_RETENTION_DAYS`)
+
+### 변경 파일
+
+- `scripts/integration-test.ps1`(8번째 블록 추가), `.env.example`(수집 변수 주석),
+  `docs/progress.md`(본 절)
+- 실 DB 검증 중 발견한 결함 수정: `backend/src/main/java/com/airvision/backend/publicdata/history/PublicAirMeasurementRepository.java`,
+  `PublicWeatherObservationRepository.java`, `ComparisonHistoryRepository.java`
+  (각 `@Modifying` 메서드에 `@Transactional` 추가)
+
+### 알려진 문제
+
+- `GET /api/dashboard/hourly?hours=24`가 Phase 2 정적 샘플 데이터 기준 시간 경과로
+  때때로 빈 배열을 반환할 수 있음(위 상세 참고). Phase 11 범위 밖이라 이번 작업에서는
+  수정하지 않음 — 다음 샘플 데이터 재생성 시 또는 별도 태스크에서 처리 권장.
+- `comparisonSnapshots`는 이번 실기동에서 0건(매칭되는 최근 AI 예측이 DB에 없었기 때문,
+  Task4 설계상 정상 동작 — 예측을 먼저 실행해야 매칭 스냅샷이 쌓임).

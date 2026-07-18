@@ -238,6 +238,29 @@ export interface PublicDataStatus {
   weather: Record<string, unknown>
 }
 
+export interface MeasurementHourlyPoint {
+  hour: string
+  avgPm10: number | null
+  avgPm25: number | null
+  count: number
+}
+
+export interface ComparisonHistoryPoint {
+  computedAt: string
+  siteName: string
+  predictedAt: string
+  predictedPm25: number
+  stationName: string | null
+  measuredPm25: number | null
+  absoluteError: number | null
+  errorRatePercent: number | null
+}
+
+export interface PublicHistorySummary {
+  accumulatedCount: number
+  earliestCollectedAt: string | null
+}
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 

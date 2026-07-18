@@ -39,6 +39,17 @@ airvision:
     comparison:
       max-distance-km: ${COMPARISON_MAX_DISTANCE_KM:5}
       max-minutes: ${COMPARISON_MAX_MINUTES:60}
+    collection:
+      enabled: ${PUBLIC_DATA_COLLECTION_ENABLED:true}
+      cron: "0 10 * * * *"
+      cleanup-cron: "0 30 3 * * *"
+      retention-days: ${PUBLIC_DATA_RETENTION_DAYS:180}
+      collect-on-startup: ${PUBLIC_DATA_COLLECT_ON_STARTUP:true}
+      sidos: [서울, 인천, 경기]
+      weather-points:
+        - { sido: 서울, latitude: 37.5665, longitude: 126.9780 }
+        - { sido: 인천, latitude: 37.4563, longitude: 126.7052 }
+        - { sido: 경기, latitude: 37.2636, longitude: 127.0286 }
   airkorea:
     service-key: ${AIRKOREA_SERVICE_KEY:}
     base-url: ${AIRKOREA_BASE_URL:https://apis.data.go.kr/B552584}
