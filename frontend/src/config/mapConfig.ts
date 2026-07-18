@@ -30,6 +30,7 @@ export const MAP_CONFIG = {
     prediction: '#f97316',
     interpolation: '#8b5cf6',
     airkorea: '#0ea5e9',
+    idwSurface: '#14b8a6',
   },
 
   /** 공공(AirKorea) 측정소 농도 막대 (원기둥) */

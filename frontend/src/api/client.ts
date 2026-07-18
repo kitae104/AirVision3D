@@ -261,6 +261,25 @@ export interface PublicHistorySummary {
   earliestCollectedAt: string | null
 }
 
+export interface IdwGridCell {
+  latitude: number
+  longitude: number
+  pm25: number
+  grade: string
+}
+
+export interface IdwGridResponse {
+  sido: string
+  power: number
+  resolution: number
+  source: string
+  mock: boolean
+  stale: boolean
+  sourceCount: number
+  bbox: { minLatitude: number; minLongitude: number; maxLatitude: number; maxLongitude: number }
+  cells: IdwGridCell[]
+}
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 
