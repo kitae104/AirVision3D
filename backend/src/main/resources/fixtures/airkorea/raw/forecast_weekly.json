@@ -1,0 +1,24 @@
+{
+  "response": {
+    "header": { "resultCode": "00", "resultMsg": "NORMAL_SERVICE." },
+    "body": {
+      "totalCount": 1,
+      "pageNo": 1,
+      "numOfRows": 10,
+      "items": [
+        {
+          "dataTime": "__TODAY__ 17시 발표",
+          "informCode": "PM25",
+          "frcstOneDt": "__W1__",
+          "frcstOneCn": "수도권 : 낮음,강원권 : 낮음,충청권 : 낮음,호남권 : 낮음,영남권 : 낮음,제주권 : 낮음",
+          "frcstTwoDt": "__W2__",
+          "frcstTwoCn": "수도권 : 높음,강원권 : 낮음,충청권 : 높음,호남권 : 낮음,영남권 : 낮음,제주권 : 낮음",
+          "frcstThreeDt": "__W3__",
+          "frcstThreeCn": "수도권 : 낮음,강원권 : 낮음,충청권 : 낮음,호남권 : 낮음,영남권 : 낮음,제주권 : 낮음",
+          "frcstFourDt": "__W4__",
+          "frcstFourCn": "수도권 : 낮음,강원권 : 낮음,충청권 : 낮음,호남권 : 낮음,영남권 : 낮음,제주권 : 낮음"
+        }
+      ]
+    }
+  }
+}

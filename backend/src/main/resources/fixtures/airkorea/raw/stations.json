@@ -1,0 +1,21 @@
+{
+  "response": {
+    "header": { "resultCode": "00", "resultMsg": "NORMAL_SERVICE." },
+    "body": {
+      "totalCount": 9,
+      "pageNo": 1,
+      "numOfRows": 1000,
+      "items": [
+        { "stationName": "송도", "addr": "인천 연수구 컨벤시아대로 391", "dmX": "37.38256", "dmY": "126.65463", "mangName": "도시대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "2010" },
+        { "stationName": "구월동", "addr": "인천 남동구 구월말로 7", "dmX": "37.44781", "dmY": "126.70869", "mangName": "도시대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "1998" },
+        { "stationName": "부평", "addr": "인천 부평구 부평대로 168", "dmX": "37.50721", "dmY": "126.72190", "mangName": "도시대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "1995" },
+        { "stationName": "논현", "addr": "인천 남동구 논현고잔로 100", "dmX": "37.40140", "dmY": "126.73110", "mangName": "도시대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "2006" },
+        { "stationName": "신흥", "addr": "인천 중구 석정로 75", "dmX": "37.46460", "dmY": "126.62890", "mangName": "도로변대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "2001" },
+        { "stationName": "검단", "addr": "인천 서구 고산후로 121", "dmX": "37.60440", "dmY": "126.68670", "mangName": "도시대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "2004" },
+        { "stationName": "영종", "addr": "인천 중구 하늘달빛로 8", "dmX": "37.49380", "dmY": "126.54110", "mangName": "도시대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "2009" },
+        { "stationName": "계산", "addr": "인천 계양구 계산새로 71", "dmX": "37.54340", "dmY": "126.72860", "mangName": "도시대기", "item": "SO2, CO, O3, NO2, PM10, PM2.5", "year": "1999" },
+        { "stationName": "이동측정소", "addr": "인천 남동구", "dmX": "", "dmY": "", "mangName": "도시대기", "item": "PM10, PM2.5", "year": "2020" }
+      ]
+    }
+  }
+}

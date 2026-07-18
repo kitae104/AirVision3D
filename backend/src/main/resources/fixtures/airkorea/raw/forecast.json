@@ -1,0 +1,48 @@
+{
+  "response": {
+    "header": { "resultCode": "00", "resultMsg": "NORMAL_SERVICE." },
+    "body": {
+      "totalCount": 3,
+      "pageNo": 1,
+      "numOfRows": 100,
+      "items": [
+        {
+          "dataTime": "__TODAY__ 11시 발표",
+          "informCode": "PM25",
+          "informData": "__TODAY__",
+          "informGrade": "서울 : 보통,인천 : 보통,경기북부 : 보통,경기남부 : 나쁨,강원영서 : 보통,강원영동 : 좋음,대전 : 보통,세종 : 나쁨,충남 : 나쁨,충북 : 나쁨,광주 : 보통,전북 : 보통,전남 : 좋음,부산 : 좋음,대구 : 보통,울산 : 좋음,경북 : 보통,경남 : 좋음,제주 : 좋음",
+          "informOverall": "미세먼지: 전 권역이 '좋음'~'나쁨'으로 예상됩니다.",
+          "informCause": "원활한 대기 확산과 강수의 영향으로 대체로 '좋음'~'보통' 수준일 것으로 예상됩니다. 다만, 수도권 남부와 충청권은 국외 미세먼지의 유입으로 다소 높을 수 있습니다.",
+          "actionKnack": "민감군(어린이, 노인, 호흡기 질환자 등)은 장시간 실외 활동을 자제하고, 외출 시 보건용 마스크(KF80 이상)를 착용하세요.",
+          "imageUrl1": "https://www.airkorea.or.kr/file/proxyImage?fileName=2026/07/18/AQFv1.png",
+          "imageUrl2": "https://www.airkorea.or.kr/file/proxyImage?fileName=2026/07/18/AQFv2.png",
+          "imageUrl3": ""
+        },
+        {
+          "dataTime": "__TODAY__ 11시 발표",
+          "informCode": "PM25",
+          "informData": "__TOMORROW__",
+          "informGrade": "서울 : 나쁨,인천 : 나쁨,경기북부 : 나쁨,경기남부 : 나쁨,강원영서 : 보통,강원영동 : 보통,대전 : 보통,세종 : 보통,충남 : 보통,충북 : 보통,광주 : 좋음,전북 : 보통,전남 : 좋음,부산 : 좋음,대구 : 좋음,울산 : 좋음,경북 : 좋음,경남 : 좋음,제주 : 좋음",
+          "informOverall": "미세먼지: 수도권은 '나쁨', 그 밖의 권역은 '좋음'~'보통'으로 예상됩니다.",
+          "informCause": "대기 정체로 국내 발생 미세먼지가 축적되고, 오전에 국외 미세먼지가 유입되어 수도권 중심으로 농도가 높을 것으로 예상됩니다.",
+          "actionKnack": "실외 활동 시 미세먼지 예보를 확인하고, 농도가 높은 시간대에는 환기를 자제하세요.",
+          "imageUrl1": "https://www.airkorea.or.kr/file/proxyImage?fileName=2026/07/18/AQFv3.png",
+          "imageUrl2": "",
+          "imageUrl3": ""
+        },
+        {
+          "dataTime": "__TODAY__ 11시 발표",
+          "informCode": "PM25",
+          "informData": "__DAY3__",
+          "informGrade": "서울 : 보통,인천 : 보통,경기북부 : 보통,경기남부 : 보통,강원영서 : 좋음,강원영동 : 좋음,대전 : 좋음,세종 : 좋음,충남 : 좋음,충북 : 보통,광주 : 좋음,전북 : 좋음,전남 : 좋음,부산 : 좋음,대구 : 좋음,울산 : 좋음,경북 : 좋음,경남 : 좋음,제주 : 좋음",
+          "informOverall": "미세먼지: 전 권역이 '좋음'~'보통'으로 예상됩니다.",
+          "informCause": "북서풍이 유입되며 대기 확산이 원활하여 대부분 권역이 낮은 농도를 보일 것으로 예상됩니다.",
+          "actionKnack": "야외 활동에 무리가 없는 수준입니다.",
+          "imageUrl1": "",
+          "imageUrl2": "",
+          "imageUrl3": ""
+        }
+      ]
+    }
+  }
+}

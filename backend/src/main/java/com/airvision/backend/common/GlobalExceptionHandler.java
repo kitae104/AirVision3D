@@ -72,6 +72,30 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(e.getMessage()));
     }
 
+    @ExceptionHandler(com.airvision.backend.publicdata.ExternalApiException.class)
+    public ResponseEntity<ApiResponse<Void>> handleExternalApiError(
+            com.airvision.backend.publicdata.ExternalApiException e) {
+        log.warn("공공 API 오류: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.error(e.getMessage()));
+    }
+
+    @ExceptionHandler(com.airvision.backend.publicdata.ExternalApiUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleExternalApiUnavailable(
+            com.airvision.backend.publicdata.ExternalApiUnavailableException e) {
+        log.error("공공 API 연결 실패: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.error(e.getMessage()));
+    }
+
+    @ExceptionHandler(com.airvision.backend.publicdata.PublicDataNotConfiguredException.class)
+    public ResponseEntity<ApiResponse<Void>> handlePublicDataNotConfigured(
+            com.airvision.backend.publicdata.PublicDataNotConfiguredException e) {
+        log.warn("공공 API 미설정: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(e.getMessage()));
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleConflict(DataIntegrityViolationException e) {
         log.warn("데이터 무결성 위반: {}", e.getMessage());

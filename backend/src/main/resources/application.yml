@@ -27,6 +27,25 @@ spring:
 airvision:
   ai-service:
     url: ${AI_SERVICE_URL:http://localhost:8000}
+  # 공공데이터포털 연동 (키가 없으면 mock-enabled=auto에 의해 Mock 데이터로 동작)
+  public-data:
+    mock-enabled: ${PUBLIC_DATA_MOCK_ENABLED:auto}   # auto | true | false
+    cache:
+      realtime-seconds: ${AIR_QUALITY_CACHE_TTL:1800}
+      stations-seconds: 86400
+      forecast-seconds: 3600
+      alerts-seconds: 1800
+      weather-seconds: ${WEATHER_CACHE_TTL:1800}
+    comparison:
+      max-distance-km: ${COMPARISON_MAX_DISTANCE_KM:5}
+      max-minutes: ${COMPARISON_MAX_MINUTES:60}
+  airkorea:
+    service-key: ${AIRKOREA_SERVICE_KEY:}
+    base-url: ${AIRKOREA_BASE_URL:https://apis.data.go.kr/B552584}
+    default-sido: ${AIRKOREA_DEFAULT_SIDO:인천}
+  kma:
+    service-key: ${KMA_SERVICE_KEY:}
+    base-url: ${KMA_BASE_URL:https://apis.data.go.kr/1360000}
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     expiration-hours: 12

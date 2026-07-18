@@ -1,0 +1,21 @@
+{
+  "response": {
+    "header": { "resultCode": "00", "resultMsg": "NORMAL_SERVICE." },
+    "body": {
+      "totalCount": 9,
+      "pageNo": 1,
+      "numOfRows": 1000,
+      "items": [
+        { "sidoName": "인천", "stationName": "송도", "dataTime": "__DATA_TIME__", "pm10Value": "24", "pm25Value": "12", "o3Value": "0.031", "no2Value": "0.014", "coValue": "0.4", "so2Value": "0.003", "khaiValue": "58", "pm10Grade": "1", "pm25Grade": "1", "o3Grade": "1", "no2Grade": "1", "coGrade": "1", "so2Grade": "1", "khaiGrade": "2", "pm10Flag": null, "pm25Flag": null, "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null },
+        { "sidoName": "인천", "stationName": "구월동", "dataTime": "__DATA_TIME__", "pm10Value": "42", "pm25Value": "28", "o3Value": "0.042", "no2Value": "0.021", "coValue": "0.5", "so2Value": "0.004", "khaiValue": "78", "pm10Grade": "2", "pm25Grade": "2", "o3Grade": "2", "no2Grade": "1", "coGrade": "1", "so2Grade": "1", "khaiGrade": "2", "pm10Flag": null, "pm25Flag": null, "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null },
+        { "sidoName": "인천", "stationName": "부평", "dataTime": "__DATA_TIME__", "pm10Value": "84", "pm25Value": "55", "o3Value": "0.055", "no2Value": "0.035", "coValue": "0.7", "so2Value": "0.005", "khaiValue": "121", "pm10Grade": "3", "pm25Grade": "3", "o3Grade": "2", "no2Grade": "2", "coGrade": "1", "so2Grade": "1", "khaiGrade": "3", "pm10Flag": null, "pm25Flag": null, "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null },
+        { "sidoName": "인천", "stationName": "논현", "dataTime": "__DATA_TIME__", "pm10Value": "132", "pm25Value": "88", "o3Value": "0.061", "no2Value": "0.041", "coValue": "0.9", "so2Value": "0.006", "khaiValue": "182", "pm10Grade": "4", "pm25Grade": "4", "o3Grade": "2", "no2Grade": "2", "coGrade": "2", "so2Grade": "1", "khaiGrade": "4", "pm10Flag": null, "pm25Flag": null, "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null },
+        { "sidoName": "인천", "stationName": "신흥", "dataTime": "__DATA_TIME__", "pm10Value": "38", "pm25Value": "-", "o3Value": "0.038", "no2Value": "0.028", "coValue": "0.6", "so2Value": "0.004", "khaiValue": "-", "pm10Grade": "2", "pm25Grade": null, "o3Grade": "2", "no2Grade": "1", "coGrade": "1", "so2Grade": "1", "khaiGrade": null, "pm10Flag": null, "pm25Flag": null, "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null },
+        { "sidoName": "인천", "stationName": "검단", "dataTime": "__DATA_TIME__", "pm10Value": "-", "pm25Value": "-", "o3Value": "-", "no2Value": "-", "coValue": "-", "so2Value": "-", "khaiValue": "-", "pm10Grade": null, "pm25Grade": null, "o3Grade": null, "no2Grade": null, "coGrade": null, "so2Grade": null, "khaiGrade": null, "pm10Flag": "통신장애", "pm25Flag": "통신장애", "o3Flag": "통신장애", "no2Flag": "통신장애", "coFlag": "통신장애", "so2Flag": "통신장애" },
+        { "sidoName": "인천", "stationName": "영종", "dataTime": "__DATA_TIME__", "pm10Value": "-", "pm25Value": "-", "o3Value": "0.029", "no2Value": "0.012", "coValue": "0.3", "so2Value": "0.002", "khaiValue": "-", "pm10Grade": null, "pm25Grade": null, "o3Grade": "1", "no2Grade": "1", "coGrade": "1", "so2Grade": "1", "khaiGrade": null, "pm10Flag": "점검및교정", "pm25Flag": "점검및교정", "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null },
+        { "sidoName": "인천", "stationName": "계산", "dataTime": "__DATA_TIME__", "pm10Value": "51", "pm25Value": "33", "o3Value": "0.044", "no2Value": "0.024", "coValue": "0.5", "so2Value": "0.004", "khaiValue": "86", "pm10Grade": "2", "pm25Grade": "2", "o3Grade": "2", "no2Grade": "1", "coGrade": "1", "so2Grade": "1", "khaiGrade": "2", "pm10Flag": null, "pm25Flag": null, "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null },
+        { "sidoName": "인천", "stationName": "이동측정소", "dataTime": "__DATA_TIME__", "pm10Value": "40", "pm25Value": "22", "o3Value": "-", "no2Value": "-", "coValue": "-", "so2Value": "-", "khaiValue": "-", "pm10Grade": "2", "pm25Grade": "2", "o3Grade": null, "no2Grade": null, "coGrade": null, "so2Grade": null, "khaiGrade": null, "pm10Flag": null, "pm25Flag": null, "o3Flag": null, "no2Flag": null, "coFlag": null, "so2Flag": null }
+      ]
+    }
+  }
+}

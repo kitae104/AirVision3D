@@ -225,3 +225,140 @@ flowchart LR
 | 6 | 미세먼지 등급 경계·색상은 backend/ai-service/frontend가 각자 설정 파일로 관리하되 값은 동일하게 유지(단일 소스: docs/api-spec.md에 명시) | 스펙의 "하드코딩 금지" |
 | 7 | 개발 언어: 코드 식별자는 영어, 주석·문서는 한국어 | 스펙 개발원칙 11 |
 | 8 | Cesium imagery는 ion 무료 토큰(팀 계정) 또는 OSM 타일 폴백 | 토큰 미확보 시에도 동작 보장 |
+
+---
+
+## Public Air Quality API Integration
+
+(2026-07-18 추가. 공공데이터포털 AirKorea·기상청 API 연동 및 3D 시각화 확장 계획)
+
+### 1. 현재 프로젝트 구조 요약 (분석 결과)
+
+- Backend: `com.airvision.backend` 도메인별 수직 슬라이스(`site`, `observation`, `interpolation`, `ai`, `prediction`, `auth`, `dashboard`, `viz`, `common`). 공통 응답 `ApiResponse`, 예외는 `GlobalExceptionHandler`, 외부 호출은 `AiServiceClient`(RestClient + SimpleClientHttpRequestFactory) 패턴. 시간은 전면 UTC `Instant`/`TIMESTAMPTZ`. 캐시·스케줄러 없음.
+- Frontend: 타입은 `src/api/client.ts` 집중, 등급 색상은 `src/config/grades.ts` 단일 출처, 지도는 `MapPage.tsx`의 `LayerKey`/`CustomDataSource` 구조, 메뉴는 `Layout.tsx`의 `NAV_ITEMS`.
+- 설정: 루트 `.env` → `spring.config.import` 자동 로드, `airvision.*` prefix + `@ConfigurationProperties` record.
+
+### 2. 재사용하는 기존 기능
+
+| 기존 코드 | 재사용 방식 |
+|---|---|
+| `AiServiceClient` 패턴 | AirKorea/KMA 클라이언트의 템플릿 (RestClient, 타임아웃, 예외 이원화) |
+| `ApiResponse` / `GlobalExceptionHandler` | 신규 컨트롤러 응답·예외 매핑 그대로 사용 |
+| `GeoUtils.haversineKm` | 근접 측정소 검색, AI-실측 매칭 거리 계산 |
+| `GradeProperties`(설정 record) 패턴 | `AirKoreaProperties`, `KmaProperties`, `PublicDataProperties` |
+| `grades.ts` / `gradeOf` | 지도·카드 등급 색상 (자체 관측값용). 공공 데이터는 AirKorea 등급코드(1~4) 기반 별도 상수 추가 |
+| MapPage `addMarker`/`CustomDataSource`/범례 | 신규 'airkorea' 레이어에 동일 패턴 적용 |
+| `@WebMvcTest`+`@MockitoBean` 테스트 패턴 | 신규 컨트롤러 슬라이스 테스트 |
+
+### 3. 사용하는 공식 API (2026-07-18 공공데이터포털에서 확인)
+
+| API | Base URL / Operation | 용도 |
+|---|---|---|
+| 에어코리아 측정소정보 (15073877) | `apis.data.go.kr/B552584/MsrstnInfoInqireSvc` / `getMsrstnList` | 측정소 목록·좌표(dmX=위도, dmY=경도, WGS84) |
+| 에어코리아 대기오염정보 (15073861) | `apis.data.go.kr/B552584/ArpltnInforInqireSvc` / `getCtprvnRltmMesureDnsty` (ver=1.3) | 시도별 실시간 측정 (PM10/PM2.5/O3/NO2/CO/SO2/KHAI + 등급/플래그) |
+| 〃 대기질 예보통보 | 〃 / `getMinuDustFrcstDspth`, `getMinuDustWeekFrcstDspth` | 오늘·내일·모레 예보, 초미세먼지 주간예보 |
+| 에어코리아 미세먼지 경보 (15073885) | `apis.data.go.kr/B552584/UlfptcaAlarmInqireSvc` / `getUlfptcaAlarmInfo` | 경보 발령·해제 현황 |
+| 기상청 단기예보 2.0 (15084084) | `apis.data.go.kr/1360000/VilageFcstInfoService_2.0` / `getUltraSrtNcst`, `getUltraSrtFcst` | 초단기실황(T1H/RN1/UUU/VVV/REH/PTY/VEC/WSD), 초단기예보(+SKY, LGT). \|값\|≥900은 결측 |
+
+모든 호출은 `returnType=JSON`(KMA는 `dataType=JSON`) 사용 — XML 파서 의존성 추가 없음.
+
+### 4. 저장 전략 결정: DB 미사용(캐시 전용)
+
+본 프로젝트는 조회·시연 중심 MVP이므로 공공 데이터를 DB에 영구 저장하지 않고
+**서버 내 TTL 인메모리 캐시**(자체 `TtlCache`, 의존성 추가 없음)로 운영한다.
+
+- TTL: 실시간 30분 / 측정소 목록 24시간 / 예보 1시간 / 경보 30분 / 기상 30분 (환경변수로 조정 가능)
+- Flyway 마이그레이션·신규 테이블 없음 → 기존 스키마 영향 0
+- 다중 서버 환경에서는 인스턴스별 캐시가 분리되는 한계 존재(문서에 기록)
+- 보존정책: 영구 저장하지 않으므로 해당 없음. 향후 연구용 저장이 필요하면 `V3__public_data.sql`로 확장(TODO)
+
+### 5. 수정할 파일 / 새로 만들 파일
+
+수정:
+- `.env.example` — AIRKOREA/KMA 키·URL, Mock, TTL 항목 추가
+- `backend/src/main/resources/application.yml` — `airvision.public-data.*` 설정 노출
+- `backend/.../common/GlobalExceptionHandler.java` — 외부 API 예외 매핑 추가
+- `frontend/src/api/client.ts` — 공공 데이터 타입·API 추가
+- `frontend/src/App.tsx`, `components/Layout.tsx` — `/public-air` 라우트·메뉴
+- `frontend/src/pages/MapPage.tsx` — 'airkorea' 레이어(색+정규화 높이 막대+풍향 화살표), 오염물질 선택, 범례 확장
+- `frontend/src/pages/DashboardPage.tsx` — 공공 대기질/기상/예보/AI비교/시스템 상태 카드
+- `README.md`, `docs/user-guide.html`, `docs/progress.md`, `docs/api-spec.md`(내부 API 추가분)
+
+신규(백엔드, `com.airvision.backend.publicdata` 하위):
+- `PublicDataProperties`(mock/TTL), `AirKoreaProperties`, `KmaProperties`
+- `common/TtlCache.java`, `common/KstTimes.java`(KST↔UTC, "24:00" 처리)
+- `ExternalApiException`, `ExternalApiUnavailableException`, `PublicDataNotConfiguredException`
+- `airkorea/`: raw 응답 record, `AirKoreaClient`(측정소·실시간·예보·경보), `AirKoreaNormalizer`, `AirKoreaService`, `AirQualityStationController`, `AirQualityCurrentController`, `AirQualityForecastController`, `AirQualityAlertController`, dto
+- `kma/`: `KmaGridConverter`(위경도→격자), `KmaWeatherClient`, `KmaWeatherService`, `WeatherController`, `WindUtils`(풍향 16방위·화살표 방향), dto
+- `comparison/`: `ComparisonService`(기존 Prediction ↔ AirKorea 실측 매칭), `ComparisonController`, dto
+- `status/`: `PublicDataStatusController`(mock 여부·마지막 수집시각·캐시 상태)
+- `resources/fixtures/airkorea/raw/*.json`, `resources/fixtures/kma/raw/*.json` (Mock 원본 — 정상/결측/통신장애/경보/좌표누락 포함)
+
+신규(프론트엔드):
+- `src/config/publicGrades.ts`(AirKorea 등급코드 1~4 상수), `src/pages/PublicAirPage.tsx`(예보·경보·AI 비교), `src/components/AlertBanner.tsx`
+
+신규(테스트): `KmaGridConverterTest`, `KstTimesTest`, `TtlCacheTest`, `WindUtilsTest`, `AirKoreaNormalizerTest`, `AirKoreaClientTest`(MockRestServiceServer), `ComparisonServiceTest`, 신규 컨트롤러 `@WebMvcTest` 4건
+
+### 6. 인증키·Mock 정책
+
+- 키는 루트 `.env`의 `AIRKOREA_SERVICE_KEY`/`KMA_SERVICE_KEY`에만 저장(코드·로그·Git 금지). **디코딩(원본) 키** 사용을 표준으로 하고, 값에 `%`가 포함되면 1회 URL-decode 후 사용(이중 인코딩 방지). 로그에는 키를 출력하지 않는다.
+- `PUBLIC_DATA_MOCK_ENABLED=auto|true|false` (기본 auto): auto는 키가 비어 있으면 Mock, 키가 있으면 실 API — 실키 입력 시 Mock 자동 비활성화.
+- Mock 비활성 상태에서 키가 없으면 명확한 설정 오류(`PublicDataNotConfiguredException` → 503)를 반환. 빌드·기동은 키 없이도 항상 가능.
+- Mock 데이터는 실제 API 원본(raw) 구조 그대로 두고 동일한 정규화 경로를 통과시켜 반환.
+
+### 7. 내부 API (신규, 모두 GET → USER/ADMIN 조회 가능)
+
+```
+GET /api/air-quality/stations?sido=&stationName=
+GET /api/air-quality/stations/nearby?latitude=&longitude=&radiusKm=
+GET /api/air-quality/current?sido=            (기본 시도: AIRKOREA_DEFAULT_SIDO, 기본 인천)
+GET /api/air-quality/current/stations/{stationName}
+GET /api/air-quality/forecast?informCode=&date=
+GET /api/air-quality/forecast/weekly
+GET /api/air-quality/alerts?year=
+GET /api/air-quality/alerts/active
+GET /api/weather/current?latitude=&longitude=
+GET /api/weather/forecast?latitude=&longitude=
+GET /api/weather/stations/{stationName}
+GET /api/air-quality/comparison/latest
+GET /api/air-quality/comparison/sites/{siteId}
+GET /api/public-data/status
+```
+
+측정소 식별자는 AirKorea 공식 API가 안정적 숫자 ID를 제공하지 않으므로 `stationName`(측정소명)을 사용한다.
+
+### 8. 구현 순서
+
+1. 공통 기반: 설정/예외/TtlCache/KstTimes + 테스트
+2. AirKorea 측정소·실시간 + Mock fixtures + 내부 API + 테스트 → 빌드 검증
+3. 3D 지도 'airkorea' 레이어(색·정규화 막대·범례·상세·안내 문구) → 프론트 빌드 검증
+4. KMA 격자 변환 + 초단기실황·예보 + 풍향 화살표 → 검증
+5. 예보·경보 API + PublicAirPage + AlertBanner → 검증
+6. AI 예측 ↔ 실측 비교(최근접 측정소, 기본 최대 5km·60분, 설정화) → 검증
+7. 대시보드 카드·시스템 상태, 문서화, 전체 빌드·테스트, progress.md 갱신
+
+### 9. 예상 위험
+
+| 위험 | 대응 |
+|---|---|
+| 서비스키 이중 인코딩(인코딩키 vs 디코딩키) | 디코딩키 표준 + `%` 감지 시 1회 디코드 + 문서 안내 |
+| KST 시각 문자열("2026-07-18 24:00" 포함) → UTC 변환 오류 | `KstTimes` 유틸 + 24:00 전용 테스트 |
+| 응답의 `-`/빈값/통신장애 플래그를 숫자로 강제 변환 | Normalizer에서 valid=false 처리, 0과 결측 구분, 단위 테스트 |
+| KMA가 오류 시 JSON 대신 XML 반환 | 파싱 실패를 `ExternalApiException`으로 변환, resultCode 검증 |
+| 키 없는 환경에서 기능 죽음 | Mock auto 모드 + 503 명확 메시지 + stale 캐시 표시 |
+| 지도 막대 높이를 실제 고도로 오해 | 정규화 함수 분리 + UI 안내 문구 고정 표기 |
+| 기존 128개 테스트 회귀 | 기존 파일 수정 최소화(핸들러·yml만), 단계마다 전체 테스트 실행 |
+
+### 10. 기존 기능 영향 가능성
+
+- `GlobalExceptionHandler`에 핸들러 3개 추가(기존 매핑 불변), `application.yml`에 `airvision.public-data.*` 추가(기존 키 불변) — 영향 없음 예상
+- SecurityConfig 무수정: 신규 경로는 기존 `/api/**` 규칙(GET=USER/ADMIN)에 자동 포함
+- MapPage는 레이어 추가 방식이라 기존 관측/예측/보간 레이어 동작 불변
+- DB 스키마 변경 없음
+
+### 11. 테스트 방법
+
+- 백엔드: 신규 단위 테스트(위 목록) + 기존 39개 포함 `gradlew test` 전체 통과, Mock 모드로 신규 API 수동 호출 확인
+- 클라이언트: `MockRestServiceServer`로 정상/빈 결과/값 누락/인증 오류(XML)/한도 초과/서버 오류 응답 재현
+- 프론트: `npm run build`(tsc 포함) + oxlint, 화면 수동 확인은 사용자 시연 시
+- 통합: 전체 스택 기동 후 `scripts/integration-test.ps1` 기존 29건 회귀 확인

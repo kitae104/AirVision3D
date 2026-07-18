@@ -1,0 +1,48 @@
+{
+  "response": {
+    "header": { "resultCode": "00", "resultMsg": "NORMAL_SERVICE." },
+    "body": {
+      "totalCount": 3,
+      "pageNo": 1,
+      "numOfRows": 200,
+      "items": [
+        {
+          "districtName": "인천",
+          "moveName": "인천권역",
+          "itemCode": "PM25",
+          "issueGbn": "주의보",
+          "issueDate": "__TODAY__",
+          "issueTime": "11:00",
+          "issueVal": "82",
+          "clearDate": "",
+          "clearTime": "",
+          "clearVal": ""
+        },
+        {
+          "districtName": "경기",
+          "moveName": "경기남부권역",
+          "itemCode": "PM10",
+          "issueGbn": "주의보",
+          "issueDate": "__YEAR__-03-05",
+          "issueTime": "09:00",
+          "issueVal": "162",
+          "clearDate": "__YEAR__-03-05",
+          "clearTime": "21:00",
+          "clearVal": "88"
+        },
+        {
+          "districtName": "서울",
+          "moveName": "서울권역",
+          "itemCode": "PM25",
+          "issueGbn": "경보",
+          "issueDate": "__YEAR__-01-22",
+          "issueTime": "13:00",
+          "issueVal": "153",
+          "clearDate": "__YEAR__-01-23",
+          "clearTime": "07:00",
+          "clearVal": "61"
+        }
+      ]
+    }
+  }
+}
