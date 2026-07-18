@@ -280,5 +280,7 @@
 - [x] 대시보드 공공 카드 5종(현재/기상/예보/AI비교/상태), /api/public-data/status — COMPLETED
 - [x] 백엔드 테스트 63건 추가 → 총 102건 통과, 프론트 빌드·oxlint 통과 — VERIFIED (2026-07-18)
 - [x] Mock 모드 실기동 검증: 백엔드 bootRun 후 신규 15개 엔드포인트 실호출 확인 — VERIFIED (2026-07-18)
-- [ ] 실 서비스키로 실 API 응답 검증 — BLOCKED (공공데이터포털 키 발급 필요, 발급 후
-      .env에 AIRKOREA_SERVICE_KEY/KMA_SERVICE_KEY 입력만 하면 자동 전환)
+- [x] 실 서비스키로 실 API 응답 검증 — VERIFIED (2026-07-18 사용자 키 입력 후 확인:
+      Mock 자동 해제, 인천 실측정소 43곳·기상 실황·예보 3일·주간예보·경보 271건 정상 수신.
+      실 응답 기반 보완 2건 — ① 24시간 등급 누락 측정소는 1시간 등급(pm10/pm25Grade1h)
+      폴백 사용, ② 경보 numOfRows 200→1000 상향. 테스트 총 103건 통과)

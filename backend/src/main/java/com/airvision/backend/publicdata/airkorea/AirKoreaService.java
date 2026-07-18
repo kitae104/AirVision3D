@@ -204,10 +204,12 @@ public class AirKoreaService {
                 hasLocation ? station.longitude() : null,
                 hasLocation,
                 KstTimes.parseDataTime(item.dataTime()),
+                // 미세먼지 등급은 1시간 등급 우선, 없으면 24시간 등급
+                // (실 응답에서 24시간 등급이 비어 있는 측정소가 있음 — 2026-07-18 확인)
                 PollutantValue.of(AirKoreaNormalizer.measured(item.pm10Value(), item.pm10Flag()),
-                        item.pm10Grade(), UNIT_UG),
+                        firstGrade(item.pm10Grade1h(), item.pm10Grade()), UNIT_UG),
                 PollutantValue.of(AirKoreaNormalizer.measured(item.pm25Value(), item.pm25Flag()),
-                        item.pm25Grade(), UNIT_UG),
+                        firstGrade(item.pm25Grade1h(), item.pm25Grade()), UNIT_UG),
                 PollutantValue.of(AirKoreaNormalizer.measured(item.o3Value(), item.o3Flag()),
                         item.o3Grade(), UNIT_PPM),
                 PollutantValue.of(AirKoreaNormalizer.measured(item.no2Value(), item.no2Flag()),
@@ -218,6 +220,11 @@ public class AirKoreaService {
                         item.so2Grade(), UNIT_PPM),
                 PollutantValue.of(AirKoreaNormalizer.measured(item.khaiValue(), null),
                         item.khaiGrade(), null));
+    }
+
+    /** 등급 코드 후보 중 유효한 첫 값 (1시간 등급 우선). */
+    private static String firstGrade(String primary, String fallback) {
+        return AirKoreaNormalizer.gradeLabel(primary) != null ? primary : fallback;
     }
 
     // ── 예보 ────────────────────────────────────────────────

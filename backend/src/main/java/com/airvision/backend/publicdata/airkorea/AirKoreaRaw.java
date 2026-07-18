@@ -58,6 +58,8 @@ public final class AirKoreaRaw {
             String khaiValue,
             String pm10Grade,
             String pm25Grade,
+            String pm10Grade1h,
+            String pm25Grade1h,
             String o3Grade,
             String no2Grade,
             String coGrade,

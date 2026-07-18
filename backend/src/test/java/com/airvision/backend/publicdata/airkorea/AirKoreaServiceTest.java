@@ -26,9 +26,15 @@ class AirKoreaServiceTest {
 
     private static AirKoreaRaw.RealtimeItem realtimeItem(String station, String pm25,
                                                          String pm25Grade, String pm25Flag) {
+        return realtimeItem(station, pm25, pm25Grade, null, pm25Flag);
+    }
+
+    private static AirKoreaRaw.RealtimeItem realtimeItem(String station, String pm25,
+                                                         String pm25Grade, String pm25Grade1h,
+                                                         String pm25Flag) {
         return new AirKoreaRaw.RealtimeItem("인천", station, "2026-07-18 14:00",
                 "40", pm25, "0.03", "0.02", "0.5", "0.003", "80",
-                "2", pm25Grade, "1", "1", "1", "1", "2",
+                "2", pm25Grade, null, pm25Grade1h, "1", "1", "1", "1", "2",
                 null, pm25Flag, null, null, null, null);
     }
 
@@ -78,6 +84,19 @@ class AirKoreaServiceTest {
         assertThat(station.latitude()).isNull();
         assertThat(station.longitude()).isNull();
         assertThat(station.pm25().value()).isEqualTo(20.0);
+    }
+
+    @Test
+    void 등급은_1시간_등급을_우선하고_없으면_24시간_등급을_쓴다() {
+        // 실 API에서 24시간 등급(pm25Grade)이 비고 1시간 등급만 있는 측정소 사례 (2026-07-18 확인)
+        when(client.realtime(anyString())).thenReturn(List.of(
+                realtimeItem("석모리", "3", null, "1", null),
+                realtimeItem("백령도", "6", "2", null, null)));
+
+        var stations = service.current("인천").stations();
+
+        assertThat(stations.get(0).pm25().grade()).isEqualTo("좋음");   // 1h 등급 사용
+        assertThat(stations.get(1).pm25().grade()).isEqualTo("보통");   // 24h 등급 폴백
     }
 
     @Test

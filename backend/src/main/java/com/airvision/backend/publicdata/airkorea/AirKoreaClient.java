@@ -122,7 +122,7 @@ public class AirKoreaClient {
     public List<AirKoreaRaw.AlertItem> alerts(int year) {
         return fetch("airkorea/raw/alerts.json",
                 "/UlfptcaAlarmInqireSvc/getUlfptcaAlarmInfo?serviceKey={key}&returnType=json"
-                        + "&numOfRows=200&pageNo=1&year={year}",
+                        + "&numOfRows=1000&pageNo=1&year={year}",
                 Map.of("key", requireKey(), "year", String.valueOf(year)),
                 new TypeReference<>() {
                 });
