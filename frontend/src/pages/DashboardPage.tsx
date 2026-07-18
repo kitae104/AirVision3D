@@ -14,9 +14,11 @@ import { apiClient, errorMessage } from '../api/client'
 import type {
   AirForecastEnvelope,
   ApiResponse,
+  ComparisonHistoryPoint,
   ComparisonResult,
   CurrentAirQuality,
   DashboardSummary,
+  MeasurementHourlyPoint,
   PageResponse,
   Prediction,
   WeatherNow,
@@ -63,6 +65,10 @@ export default function DashboardPage() {
   const [weather, setWeather] = useState<WeatherNow | null>(null)
   const [forecast, setForecast] = useState<AirForecastEnvelope | null>(null)
   const [comparison, setComparison] = useState<ComparisonResult | null>(null)
+  const [airHistory, setAirHistory] = useState<{ time: string; pm25: number | null }[]>([])
+  const [errorHistory, setErrorHistory] =
+    useState<{ time: string; error: number | null }[]>([])
+  const [accumulated, setAccumulated] = useState<number | null>(null)
 
   // 공공 데이터는 실패해도 대시보드 나머지에 영향을 주지 않도록 개별 로드
   useEffect(() => {
@@ -87,6 +93,28 @@ export default function DashboardPage() {
     apiClient.get<ApiResponse<ComparisonResult>>('/air-quality/comparison/latest')
       .then((res) => setComparison(res.data.data))
       .catch(() => setComparison(null))
+  }, [])
+
+  useEffect(() => {
+    const now = Date.now()
+    const from = new Date(now - 48 * 3600 * 1000).toISOString()
+    const to = new Date(now).toISOString()
+    apiClient.get<ApiResponse<MeasurementHourlyPoint[]>>(
+      `/public-data/history/measurements/hourly?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+      .then((res) => setAirHistory(res.data.data.map((p) => ({
+        time: new Date(p.hour).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit' }),
+        pm25: p.avgPm25 != null ? Math.round(p.avgPm25 * 10) / 10 : null,
+      }))))
+      .catch(() => setAirHistory([]))
+    apiClient.get<ApiResponse<ComparisonHistoryPoint[]>>('/air-quality/comparison/history')
+      .then((res) => setErrorHistory(res.data.data.map((p) => ({
+        time: new Date(p.computedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit' }),
+        error: p.absoluteError,
+      }))))
+      .catch(() => setErrorHistory([]))
+    apiClient.get<ApiResponse<{ accumulatedCount: number }>>('/public-data/history/summary')
+      .then((res) => setAccumulated(res.data.data.accumulatedCount))
+      .catch(() => setAccumulated(null))
   }, [])
 
   useEffect(() => {
@@ -279,6 +307,61 @@ export default function DashboardPage() {
               </LineChart>
             </ResponsiveContainer>
           )}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-baseline gap-3">
+          <h3 className="font-semibold text-gray-900">공공 데이터 누적 추이</h3>
+          <span className="text-xs text-gray-400">
+            매시간 자동 수집 · 출처: AirKorea / 기상청
+            {accumulated != null && ` · 누적 ${accumulated.toLocaleString()}건`}
+          </span>
+        </div>
+        <div className="grid gap-6 xl:grid-cols-2">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <h4 className="mb-3 text-sm font-semibold text-gray-700">
+              공공 실측 PM2.5 추이 (수도권 시간별 평균, 최근 48h)
+            </h4>
+            {airHistory.length === 0 ? (
+              <p className="py-16 text-center text-sm text-gray-400">
+                아직 누적된 실측 데이터가 없습니다. 수집이 진행되면 표시됩니다.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={airHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="time" fontSize={11} />
+                  <YAxis fontSize={12} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="pm25" name="평균 PM2.5"
+                    stroke="#0ea5e9" strokeWidth={2} dot={false} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <h4 className="mb-3 text-sm font-semibold text-gray-700">
+              AI 추정-실측 절대오차 추이 (PM2.5)
+            </h4>
+            {errorHistory.length === 0 ? (
+              <p className="py-16 text-center text-sm text-gray-400">
+                비교 이력이 아직 없습니다. AI 예측을 실행하면 매칭된 오차가 시간에 따라 쌓입니다.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={errorHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="time" fontSize={11} />
+                  <YAxis fontSize={12} unit="㎍" />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="error" name="절대오차"
+                    stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
       </div>
     </div>
