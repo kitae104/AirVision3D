@@ -18,6 +18,7 @@ public class PublicWeatherObservation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "sido", length = 20)
     private String sido;
 
     @Column(name = "grid_x", nullable = false)

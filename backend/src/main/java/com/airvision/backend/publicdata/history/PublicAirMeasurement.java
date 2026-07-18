@@ -21,6 +21,7 @@ public class PublicAirMeasurement {
     @Column(name = "station_name", nullable = false, length = 100)
     private String stationName;
 
+    @Column(name = "sido", length = 20)
     private String sido;
     private Double latitude;
     private Double longitude;
