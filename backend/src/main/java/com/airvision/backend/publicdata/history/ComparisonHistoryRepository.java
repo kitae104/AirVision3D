@@ -6,10 +6,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface ComparisonHistoryRepository extends JpaRepository<ComparisonHistory, Long> {
 
     @Modifying
+    @Transactional
     @Query(value = """
             INSERT INTO comparison_history
               (site_id, site_name, predicted_at, predicted_pm25, station_name,

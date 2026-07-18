@@ -6,11 +6,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface PublicWeatherObservationRepository
         extends JpaRepository<PublicWeatherObservation, Long> {
 
     @Modifying
+    @Transactional
     @Query(value = """
             INSERT INTO public_weather_observation
               (sido, grid_x, grid_y, latitude, longitude, base_time,
@@ -37,5 +39,6 @@ public interface PublicWeatherObservationRepository
             String sido, Instant from, Instant to);
 
     @Modifying
+    @Transactional
     void deleteByBaseTimeBefore(Instant cutoff);
 }

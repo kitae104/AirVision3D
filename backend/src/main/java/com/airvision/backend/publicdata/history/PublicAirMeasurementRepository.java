@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface PublicAirMeasurementRepository extends JpaRepository<PublicAirMeasurement, Long> {
 
@@ -22,6 +23,7 @@ public interface PublicAirMeasurementRepository extends JpaRepository<PublicAirM
     }
 
     @Modifying
+    @Transactional
     @Query(value = """
             INSERT INTO public_air_measurement
               (station_name, sido, latitude, longitude, measured_at,
@@ -61,6 +63,7 @@ public interface PublicAirMeasurementRepository extends JpaRepository<PublicAirM
             String stationName, Instant from, Instant to);
 
     @Modifying
+    @Transactional
     void deleteByMeasuredAtBefore(Instant cutoff);
 
     Optional<PublicAirMeasurement> findFirstByOrderByCollectedAtAsc();

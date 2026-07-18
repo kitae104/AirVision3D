@@ -105,6 +105,21 @@ $series = (Invoke-RestMethod ("$base/viz/observations/series?from=$($to.AddHours
 Assert-True "시계열 조회 (6시간)" ($series.Count -ge 7 -and $series[0].samples.Count -ge 6)
 Assert-True "Cesium 자산 서빙" ((Get-StatusCode -Url "http://127.0.0.1:5173/cesium/Widgets/widgets.css") -eq 200)
 
+Write-Host "`n=== 8. 공공 데이터 누적 ===" -ForegroundColor Cyan
+$collect = $null
+try { $collect = (Invoke-RestMethod -Method Post -Uri "$base/public-data/collect" -Headers $H).data } catch {}
+Assert-True "수동 수집: 측정 1건 이상" ($null -ne $collect -and $collect.measurementsUpserted -ge 1) "(현재 $($collect.measurementsUpserted))"
+
+$hourly2 = $null
+try { $hourly2 = (Invoke-RestMethod "$base/public-data/history/measurements/hourly" -Headers $H).data } catch {}
+Assert-True "시간별 이력 조회 (누적)" ($null -ne $hourly2 -and $hourly2.Count -ge 1)
+
+$pdSummary = $null
+try { $pdSummary = (Invoke-RestMethod "$base/public-data/history/summary" -Headers $H).data } catch {}
+Assert-True "누적 요약 건수" ($null -ne $pdSummary -and $pdSummary.accumulatedCount -ge 1) "(현재 $($pdSummary.accumulatedCount))"
+
+Assert-True "오차 이력 조회 200" ((Get-StatusCode -Url "$base/air-quality/comparison/history" -Headers $H) -eq 200)
+
 Write-Host "`n=== 결과 ===" -ForegroundColor Cyan
 Write-Host ("  PASS: {0}  /  FAIL: {1}" -f $script:passed, $script:failed) -ForegroundColor $(if ($script:failed -eq 0) { "Green" } else { "Red" })
 exit $(if ($script:failed -eq 0) { 0 } else { 1 })
