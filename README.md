@@ -155,6 +155,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\integration-test.ps1
 | 문서 | 내용 |
 |---|---|
 | [user-guide.html](docs/user-guide.html) | **사용 설명서** (처음 사용하는 사람용, 브라우저로 열기) |
+| [runtime-requirements.md](docs/runtime-requirements.md) | 실행에 필요한 정보 정리 (DB·환경변수·포트·계정·준비 상태) |
 | [requirements.md](docs/requirements.md) | 요구사항 정의와 구현 현황 |
 | [architecture.md](docs/architecture.md) | 시스템 아키텍처·설계 결정 |
 | [database-design.md](docs/database-design.md) | ERD·스키마 설계 |
