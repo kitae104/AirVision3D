@@ -36,8 +36,7 @@ public interface PublicAirMeasurementRepository extends JpaRepository<PublicAirM
                pm10 = EXCLUDED.pm10, pm25 = EXCLUDED.pm25, o3 = EXCLUDED.o3,
                no2 = EXCLUDED.no2, co = EXCLUDED.co, so2 = EXCLUDED.so2,
                khai = EXCLUDED.khai, pm10_grade = EXCLUDED.pm10_grade,
-               pm25_grade = EXCLUDED.pm25_grade, collected_mock = EXCLUDED.collected_mock,
-               collected_at = EXCLUDED.collected_at
+               pm25_grade = EXCLUDED.pm25_grade, collected_mock = EXCLUDED.collected_mock
             """, nativeQuery = true)
     int upsert(@Param("stationName") String stationName, @Param("sido") String sido,
                @Param("latitude") Double latitude, @Param("longitude") Double longitude,

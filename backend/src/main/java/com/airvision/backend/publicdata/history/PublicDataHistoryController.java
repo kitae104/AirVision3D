@@ -1,7 +1,6 @@
 package com.airvision.backend.publicdata.history;
 
 import com.airvision.backend.common.ApiResponse;
-import com.airvision.backend.publicdata.history.dto.ComparisonHistoryPoint;
 import com.airvision.backend.publicdata.history.dto.MeasurementHourlyPoint;
 import com.airvision.backend.publicdata.history.dto.MeasurementSeriesPoint;
 import com.airvision.backend.publicdata.history.dto.WeatherSeriesPoint;
@@ -69,15 +68,5 @@ public class PublicDataHistoryController {
         body.put("accumulatedCount", historyService.accumulatedCount());
         body.put("earliestCollectedAt", historyService.earliestCollectedAt());
         return ApiResponse.ok(body);
-    }
-
-    @Operation(summary = "AI 추정-실측 오차 이력")
-    @GetMapping("/comparison")
-    public ApiResponse<List<ComparisonHistoryPoint>> comparisonHistory(
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return ApiResponse.ok(historyService.comparisonHistory(from, to));
     }
 }

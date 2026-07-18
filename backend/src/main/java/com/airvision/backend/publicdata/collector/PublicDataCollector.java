@@ -82,9 +82,14 @@ public class PublicDataCollector {
             return;
         }
         Instant cutoff = clock.instant().minus(Duration.ofDays(props.retentionDays()));
-        measurementRepo.deleteByMeasuredAtBefore(cutoff);
-        weatherRepo.deleteByBaseTimeBefore(cutoff);
-        log.info("공공 데이터 정리: {} 이전 삭제", cutoff);
+        try {
+            measurementRepo.deleteByMeasuredAtBefore(cutoff);
+            weatherRepo.deleteByBaseTimeBefore(cutoff);
+            comparisonRepo.deleteByComputedAtBefore(cutoff);
+            log.info("공공 데이터 정리: {} 이전 삭제", cutoff);
+        } catch (RuntimeException e) {
+            log.warn("공공 데이터 정리 실패: {}", e.getMessage());
+        }
     }
 
     @EventListener(ApplicationReadyEvent.class)

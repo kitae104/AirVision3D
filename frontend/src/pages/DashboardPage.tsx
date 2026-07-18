@@ -21,6 +21,7 @@ import type {
   MeasurementHourlyPoint,
   PageResponse,
   Prediction,
+  PublicHistorySummary,
   WeatherNow,
 } from '../api/client'
 import { gradeStyle } from '../config/grades'
@@ -112,7 +113,7 @@ export default function DashboardPage() {
         error: p.absoluteError,
       }))))
       .catch(() => setErrorHistory([]))
-    apiClient.get<ApiResponse<{ accumulatedCount: number }>>('/public-data/history/summary')
+    apiClient.get<ApiResponse<PublicHistorySummary>>('/public-data/history/summary')
       .then((res) => setAccumulated(res.data.data.accumulatedCount))
       .catch(() => setAccumulated(null))
   }, [])

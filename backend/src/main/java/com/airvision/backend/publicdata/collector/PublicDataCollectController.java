@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 수동 수집 트리거 (ADMIN — POST /api/** 규칙). 데모 시 즉시 1회 수집용. */
-@Tag(name = "Public Data History", description = "공공 데이터 누적 시계열 조회")
+@Tag(name = "Public Data Collection", description = "공공 데이터 수동 수집")
 @RestController
 @RequestMapping("/api/public-data")
 public class PublicDataCollectController {

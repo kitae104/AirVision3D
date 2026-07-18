@@ -35,4 +35,8 @@ public interface ComparisonHistoryRepository extends JpaRepository<ComparisonHis
                        @Param("computedAt") Instant computedAt);
 
     List<ComparisonHistory> findByComputedAtBetweenOrderByComputedAt(Instant from, Instant to);
+
+    @Modifying
+    @Transactional
+    void deleteByComputedAtBefore(Instant cutoff);
 }

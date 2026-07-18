@@ -25,7 +25,7 @@ public interface PublicWeatherObservationRepository
                temperature = EXCLUDED.temperature, humidity = EXCLUDED.humidity,
                wind_speed = EXCLUDED.wind_speed, wind_direction_deg = EXCLUDED.wind_direction_deg,
                precipitation_type = EXCLUDED.precipitation_type,
-               collected_mock = EXCLUDED.collected_mock, collected_at = EXCLUDED.collected_at
+               collected_mock = EXCLUDED.collected_mock
             """, nativeQuery = true)
     int upsert(@Param("sido") String sido, @Param("gridX") int gridX, @Param("gridY") int gridY,
                @Param("latitude") Double latitude, @Param("longitude") Double longitude,
