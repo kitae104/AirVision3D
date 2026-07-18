@@ -90,6 +90,20 @@ class PublicDataHistoryServiceTest {
     }
 
     @Test
+    void 조회_기간이_31일을_초과하면_예외다() {
+        Instant from = NOW.minus(java.time.Duration.ofDays(32));
+        assertThatThrownBy(() -> service.hourly(null, from, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void 정확히_31일_기간은_허용된다() {
+        when(measurementRepo.findHourlyAvg(isNull(), any(), any())).thenReturn(java.util.List.of());
+        Instant from = NOW.minus(java.time.Duration.ofDays(31));
+        assertThat(service.hourly(null, from, NOW)).isEmpty();
+    }
+
+    @Test
     void 비교_이력_엔티티를_DTO로_매핑한다() {
         ComparisonHistory h = mock(ComparisonHistory.class);
         when(h.getComputedAt()).thenReturn(NOW);
