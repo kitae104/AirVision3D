@@ -3,7 +3,7 @@
 > 상태 정의: NOT_STARTED / IN_PROGRESS / BLOCKED / COMPLETED(코드 작성 완료) / VERIFIED(실행·테스트 성공 확인)
 > 갱신 규칙: 각 작업 완료 시 본 문서를 갱신한다. 테스트를 실행하지 못한 경우 사유를 기록한다.
 
-최종 갱신: 2026-07-18
+최종 갱신: 2026-07-19
 
 ## Phase 요약
 
@@ -21,6 +21,7 @@
 | 9 | 통합 테스트와 배포 | VERIFIED | 통합 테스트 29건 통과, 산출물 문서 11종 작성(2026-07-18). 브라우저 육안 확인만 잔여 |
 | 10 | 공공 대기환경 API 연동 | COMPLETED | 5단계 구현(측정소·지도·기상·예보·AI비교), 테스트 103건 통과, 실 서비스키 검증 완료 |
 | 11 | 공공 데이터 시계열 축적 루프 | VERIFIED | 실 DB 실기동 검증(2026-07-18). 트랜잭션 버그 발견·수정, 수집 208건/재수집 멱등 확인, integration-test 33건 중 32 PASS(신규 4건 전부 PASS) |
+| 12 | 실측 IDW 격자 표면(2순위 첫 기능) | VERIFIED | 백엔드 테스트 126건, 실기동 검증(2026-07-19): 인천 cells=100·sourceCount=41·mock=false, 서울 sourceCount=38, resolution=25→400 확인 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -368,3 +369,37 @@
   보충(ON CONFLICT DO NOTHING). 실 DB 검증: 대시보드 24시간 조회 0→24건, 통합 테스트 33/33 PASS.
 - `comparisonSnapshots`는 이번 실기동에서 0건(매칭되는 최근 AI 예측이 DB에 없었기 때문,
   Task4 설계상 정상 동작 — 예측을 먼저 실행해야 매칭 스냅샷이 쌓임).
+
+## Phase 12. 실측 IDW 격자 표면(2순위 첫 기능) — VERIFIED (2026-07-19)
+
+계획: `.superpowers/sdd/task-1-brief.md` ~ `task-3-brief.md` 3개 태스크. AirKorea 실측 다수 지점을
+IDW로 보간해 지도에 색상 농도 면으로 표시하는 기능.
+
+### 구현 내용 (Task 1~2, 이전 커밋)
+
+- [x] 백엔드: `GET /api/air-quality/interpolation/grid?sido=&power=&resolution=` —
+      시/도 실측 다수 지점을 bbox로 격자화(resolution×resolution, 2~20 범위)하고
+      기존 `IdwInterpolator`·`GradeProperties`로 각 셀 pm25·등급 계산. `IdwGridResponse`
+      DTO(sido·power·resolution·source·mock·stale·sourceCount·bbox·cells[]). 기존
+      `IdwInterpolator`·`GradeProperties`·`AirKoreaService`는 무변경(주입만)
+- [x] 프론트엔드: MapPage에 `idwSurface` 레이어(체크박스, 기본 꺼짐) — 셀별 색상 상자로
+      타일링(높이 아닌 색으로 농도 표현), `config/mapConfig.ts`에 레이어 색상 추가
+- [x] 백엔드 테스트 총 126건 통과 (서비스 bbox·격자·필터·검증 + 컨트롤러 슬라이스 포함)
+
+### 실기동 검증 (Task 3, 2026-07-19)
+
+- [x] `.\run.ps1 -Stop` → 포트 8080/8000/5173 미사용 확인 → `.\run.ps1` → 3개 헬스체크
+      모두 OK 확인(신규 PID로 재기동 확인)
+- [x] user 계정 로그인 후 `GET /api/air-quality/interpolation/grid?sido=인천&resolution=10` 실호출:
+      `cells` 길이 **100**(10×10), `sourceCount` **41**(실측), `mock` **false**(실 AirKorea
+      서비스키 사용 중), `bbox` 포함(minLatitude 36.94~maxLatitude 38.03 등), 모든 셀에
+      숫자 `pm25`와 등급 문자열 `grade`("좋음" 등) 확인. 샘플 셀: `pm25=6.7, grade=좋음`
+- [x] 두 번째 시/도로 일반화 확인: `sido=서울&resolution=10` → `sourceCount` **38**, `mock` **false**
+- [x] resolution 경계값 확인: `resolution=20`(상한) → 200 정상, `resolution=25`(범위 초과) →
+      **400** + 메시지 "resolution은 2~20 범위여야 합니다"
+- [x] `.\run.ps1 -Stop`으로 정상 종료
+
+### 변경 파일 (Task 3)
+
+- `docs/progress.md`(본 절), `docs/user-guide.html`(§7 레이어 설명·버전 갱신)
+- 소스 코드 변경 없음(검증·문서만)
