@@ -210,7 +210,6 @@ export interface WeatherForecast {
 }
 
 export interface ComparisonRow {
-  predictionId: number
   siteId: number
   siteName: string
   predictedAt: string

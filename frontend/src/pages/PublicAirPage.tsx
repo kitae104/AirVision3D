@@ -275,7 +275,7 @@ export default function PublicAirPage() {
               </thead>
               <tbody>
                 {comparison.rows.map((row) => (
-                  <tr key={row.predictionId} className="border-t border-gray-100">
+                  <tr key={row.siteId} className="border-t border-gray-100">
                     <td className="px-3 py-2">
                       {row.siteName}
                       <span className="block text-[11px] text-gray-400">
