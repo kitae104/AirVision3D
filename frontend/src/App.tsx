@@ -8,6 +8,7 @@ import MapPage from './pages/MapPage'
 import MetricsPage from './pages/MetricsPage'
 import ObservationsPage from './pages/ObservationsPage'
 import PredictPage from './pages/PredictPage'
+import PublicAirPage from './pages/PublicAirPage'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/observations" element={<ObservationsPage />} />
+        <Route path="/public-air" element={<PublicAirPage />} />
         <Route path="/metrics" element={<MetricsPage />} />
         <Route
           path="/data-entry"

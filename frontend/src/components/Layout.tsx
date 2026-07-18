@@ -1,10 +1,12 @@
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
+import AlertBanner from './AlertBanner'
 
 const NAV_ITEMS = [
   { to: '/', label: '대시보드', adminOnly: false },
   { to: '/map', label: '3D 지도', adminOnly: false },
   { to: '/observations', label: '관측 데이터', adminOnly: false },
+  { to: '/public-air', label: '공공 대기질', adminOnly: false },
   { to: '/data-entry', label: '데이터 등록', adminOnly: true },
   { to: '/predict', label: 'AI 예측', adminOnly: true },
   { to: '/interpolation', label: 'IDW 보간', adminOnly: true },
@@ -58,6 +60,7 @@ export default function Layout() {
         </div>
       </aside>
       <main className="flex-1 overflow-x-auto p-6">
+        <AlertBanner />
         <Outlet />
       </main>
     </div>
