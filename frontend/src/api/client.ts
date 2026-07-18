@@ -81,6 +81,164 @@ export interface ModelMetrics {
   confusion_matrix: number[][]
 }
 
+// ── 공공 데이터 (AirKorea·기상청) 타입 ──────────────────────
+
+/** 오염물질 측정값. valid=false면 value는 null이고 status로 사유를 구분 */
+export interface PollutantValue {
+  value: number | null
+  unit: string | null
+  grade: string | null
+  valid: boolean
+  status: 'NORMAL' | 'NO_DATA' | 'COMM_ERROR' | 'MAINTENANCE' | 'INVALID'
+}
+
+export interface PublicStationAir {
+  stationName: string
+  sidoName: string
+  latitude: number | null
+  longitude: number | null
+  locationAvailable: boolean
+  measuredAt: string | null
+  pm10: PollutantValue
+  pm25: PollutantValue
+  o3: PollutantValue
+  no2: PollutantValue
+  co: PollutantValue
+  so2: PollutantValue
+  khai: PollutantValue
+}
+
+export interface CurrentAirQuality {
+  sido: string
+  source: string
+  mock: boolean
+  stale: boolean
+  collectedAt: string | null
+  message: string | null
+  stations: PublicStationAir[]
+}
+
+export interface PublicStation {
+  stationName: string
+  addr: string | null
+  sido: string | null
+  mangName: string | null
+  items: string | null
+  latitude: number | null
+  longitude: number | null
+  locationAvailable: boolean
+  distanceKm: number | null
+}
+
+export interface RegionGrade {
+  region: string
+  grade: string
+}
+
+export interface AirForecast {
+  informCode: string
+  forecastDate: string | null
+  announcedAt: string | null
+  overall: string | null
+  cause: string | null
+  actionKnack: string | null
+  grades: RegionGrade[]
+  imageUrls: string[]
+}
+
+export interface AirForecastEnvelope {
+  informCode: string
+  stale: boolean
+  lastUpdatedAt: string | null
+  forecasts: AirForecast[]
+}
+
+export interface WeeklyForecast {
+  announcedAt: string | null
+  days: { date: string; content: string | null }[]
+}
+
+export interface AirAlert {
+  districtName: string | null
+  moveName: string | null
+  itemCode: string | null
+  issueLevel: string | null
+  issuedAt: string | null
+  issueValue: number | null
+  clearedAt: string | null
+  clearValue: number | null
+  active: boolean
+}
+
+export interface WeatherNow {
+  latitude: number
+  longitude: number
+  gridX: number
+  gridY: number
+  baseTime: string | null
+  source: string
+  mock: boolean
+  stale: boolean
+  temperature: number | null
+  humidity: number | null
+  precipitationMm: number | null
+  precipitationType: string | null
+  windSpeed: number | null
+  windDirectionDegree: number | null
+  windDirectionText: string | null
+  windArrowDegree: number | null
+}
+
+export interface WeatherForecastHour {
+  forecastAt: string
+  temperature: number | null
+  humidity: number | null
+  sky: string | null
+  precipitationType: string | null
+  windSpeed: number | null
+  windDirectionDegree: number | null
+  windDirectionText: string | null
+}
+
+export interface WeatherForecast {
+  latitude: number
+  longitude: number
+  baseTime: string | null
+  source: string
+  mock: boolean
+  hours: WeatherForecastHour[]
+}
+
+export interface ComparisonRow {
+  predictionId: number
+  siteId: number
+  siteName: string
+  predictedAt: string
+  predictedPm25: number
+  stationName: string | null
+  measuredAt: string | null
+  measuredPm25: number | null
+  distanceKm: number | null
+  timeDiffMinutes: number | null
+  absoluteError: number | null
+  errorRatePercent: number | null
+  matched: boolean
+  reason: string | null
+}
+
+export interface ComparisonResult {
+  maxDistanceKm: number
+  maxMinutes: number
+  sido: string
+  mock: boolean
+  rows: ComparisonRow[]
+}
+
+export interface PublicDataStatus {
+  airkorea: Record<string, unknown>
+  weather: Record<string, unknown>
+}
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 

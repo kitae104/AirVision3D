@@ -29,5 +29,23 @@ export const MAP_CONFIG = {
     observation: '#2563eb',
     prediction: '#f97316',
     interpolation: '#8b5cf6',
+    airkorea: '#0ea5e9',
+  },
+
+  /** 공공(AirKorea) 측정소 농도 막대 (원기둥) */
+  publicBar: {
+    /** 반지름 (m) */
+    radius: 240,
+    /** 채움 투명도 */
+    alpha: 0.55,
+  },
+
+  /** 풍향 화살표 (기상청) */
+  windArrow: {
+    /** 화살표 길이 (m) */
+    lengthM: 1600,
+    /** 표시 고도 (m) */
+    altitudeM: 80,
+    color: '#0891b2',
   },
 } as const

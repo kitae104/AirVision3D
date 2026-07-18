@@ -2,9 +2,17 @@ import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
-import type { ApiResponse, InterpolationResult, PageResponse, Site } from '../api/client'
+import type {
+  ApiResponse, CurrentAirQuality, InterpolationResult, PageResponse,
+  PollutantValue, PublicStationAir, Site,
+} from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { MAP_CONFIG } from '../config/mapConfig'
+import {
+  PUBLIC_GRADE_COLORS, PUBLIC_POLLUTANTS, VALUE_STATUS_LABELS,
+  displayHeightM, publicGradeOf,
+} from '../config/publicGrades'
+import type { PublicPollutantKey } from '../config/publicGrades'
 
 /** 시각화 API 응답 (관측/예측 최신값) */
 interface VizPoint {
@@ -27,12 +35,13 @@ interface SeriesSite {
   samples: { time: string; pm25: number }[]
 }
 
-type LayerKey = 'observation' | 'prediction' | 'interpolation'
+type LayerKey = 'observation' | 'prediction' | 'interpolation' | 'airkorea'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
   observation: '관측값',
   prediction: 'AI 예측값',
   interpolation: 'IDW 보간값',
+  airkorea: '공공 대기질',
 }
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
@@ -194,6 +203,70 @@ function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite) {
   }
 }
 
+/** 공공 측정소 팝업(InfoBox) HTML: 전체 오염물질 + 상태 표 */
+function buildPublicDescription(station: PublicStationAir): string {
+  const row = (label: string, v: PollutantValue) => {
+    const content = v.valid && v.value != null
+      ? `<b>${v.value}</b> ${v.unit ?? ''} ${v.grade ? `(${v.grade})` : ''}`
+      : `<span style="color:#999">${VALUE_STATUS_LABELS[v.status] ?? '데이터 없음'}</span>`
+    return `<tr><th>${label}</th><td>${content}</td></tr>`
+  }
+  return `
+    <table class="cesium-infoBox-defaultTable"><tbody>
+      <tr><th>구분</th><td>공공 실측 (AirKorea)</td></tr>
+      ${row('PM10', station.pm10)}
+      ${row('PM2.5', station.pm25)}
+      ${row('O₃', station.o3)}
+      ${row('NO₂', station.no2)}
+      ${row('CO', station.co)}
+      ${row('SO₂', station.so2)}
+      ${row('통합지수', station.khai)}
+      <tr><th>측정시간</th><td>${station.measuredAt ? new Date(station.measuredAt).toLocaleString('ko-KR') : '-'}</td></tr>
+      <tr><th>출처</th><td>환경부·한국환경공단 AirKorea</td></tr>
+    </tbody></table>`
+}
+
+/**
+ * 공공 측정소 1곳 표시: 농도 막대(원기둥) + 마커/라벨.
+ * 막대 높이는 농도 비교용 정규화 값이며 실제 오염층 높이가 아니다 (화면 안내 문구 참조).
+ */
+function addPublicStation(ds: Cesium.CustomDataSource, station: PublicStationAir,
+                          pollutant: PublicPollutantKey) {
+  if (!station.locationAvailable || station.latitude == null || station.longitude == null) return
+  const v = station[pollutant]
+  const description = buildPublicDescription(station)
+  const config = PUBLIC_POLLUTANTS.find((p) => p.key === pollutant)!
+
+  if (v.valid && v.value != null) {
+    const grade = v.grade ?? publicGradeOf(pollutant, v.value)
+    const color = Cesium.Color.fromCssColorString(
+      PUBLIC_GRADE_COLORS[grade] ?? PUBLIC_GRADE_COLORS['데이터 없음'])
+    const height = displayHeightM(pollutant, v.value)
+    ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(station.longitude, station.latitude, height / 2),
+      cylinder: {
+        length: height,
+        topRadius: MAP_CONFIG.publicBar.radius,
+        bottomRadius: MAP_CONFIG.publicBar.radius,
+        material: color.withAlpha(MAP_CONFIG.publicBar.alpha),
+        outline: true,
+        outlineColor: color.withAlpha(0.9),
+      },
+      name: `${station.stationName} (공공 실측)`,
+      description,
+    })
+    // 색상 + 텍스트 등급을 함께 표기 (색상만으로 상태를 구분하지 않음)
+    addMarker(ds, station.longitude, station.latitude, `${station.stationName} (공공 실측)`,
+      MAP_CONFIG.markers.airkorea, description,
+      `${station.stationName}\n${v.value}${config.unit} ${grade}`)
+  } else {
+    // 데이터 없음/장애 측정소: 회색 마커 + 사유 텍스트 (오류처럼 보이지 않게)
+    addMarker(ds, station.longitude, station.latitude, `${station.stationName} (공공 실측)`,
+      PUBLIC_GRADE_COLORS['데이터 없음'], description,
+      `${station.stationName}\n△ ${VALUE_STATUS_LABELS[v.status] ?? '데이터 없음'}`)
+  }
+}
+
 /** Date → datetime-local 입력값 (로컬 타임존) */
 function toLocalInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -210,12 +283,28 @@ export default function MapPage() {
     observation: true,
     prediction: true,
     interpolation: true,
+    airkorea: true,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [pollutant, setPollutant] = useState<PublicPollutantKey>('pm25')
+  const [publicAir, setPublicAir] = useState<CurrentAirQuality | null>(null)
+  const [publicError, setPublicError] = useState<string | null>(null)
+
+  /** 공공(AirKorea) 실시간 대기질 로드 — 자체 데이터 오류와 분리해 처리 */
+  const loadPublicAir = async () => {
+    setPublicError(null)
+    try {
+      const res = await apiClient.get<ApiResponse<CurrentAirQuality>>('/air-quality/current')
+      setPublicAir(res.data.data)
+    } catch (err) {
+      setPublicAir(null)
+      setPublicError(errorMessage(err))
+    }
+  }
 
   /** 현재값 모드 데이터 로드 */
   const loadCurrent = async () => {
@@ -353,6 +442,7 @@ export default function MapPage() {
       observation: new Cesium.CustomDataSource('observation'),
       prediction: new Cesium.CustomDataSource('prediction'),
       interpolation: new Cesium.CustomDataSource('interpolation'),
+      airkorea: new Cesium.CustomDataSource('airkorea'),
     }
     Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
@@ -381,6 +471,7 @@ export default function MapPage() {
         }
       })
     loadCurrent()
+    loadPublicAir()
 
     return () => {
       viewer.destroy()
@@ -398,6 +489,17 @@ export default function MapPage() {
       ds[key].show = layers[key]
     })
   }, [layers])
+
+  // 공공 대기질 레이어 렌더링 (데이터 또는 기준 오염물질 변경 시)
+  useEffect(() => {
+    const ds = dataSourcesRef.current
+    if (!ds) return
+    ds.airkorea.entities.removeAll()
+    if (!publicAir) return
+    for (const station of publicAir.stations) {
+      addPublicStation(ds.airkorea, station, pollutant)
+    }
+  }, [publicAir, pollutant])
 
   const flyToSite = (site: Site) => {
     viewerRef.current?.camera.flyTo({
@@ -445,6 +547,23 @@ export default function MapPage() {
           ))}
         </select>
 
+        {layers.airkorea && (
+          <label className="flex items-center gap-1.5 text-sm text-gray-700">
+            <span className="text-gray-500">공공 기준항목</span>
+            <select
+              value={pollutant}
+              onChange={(e) => setPollutant(e.target.value as PublicPollutantKey)}
+              className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              {PUBLIC_POLLUTANTS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         <div className="ml-auto flex items-center gap-2 text-xs text-gray-600">
           {GRADES.map((g) => (
             <span key={g.name} className="flex items-center gap-1">
@@ -453,8 +572,40 @@ export default function MapPage() {
               {g.upper != null && ` ≤${g.upper}`}
             </span>
           ))}
+          <span className="flex items-center gap-1">
+            <span
+              className="inline-block h-3 w-3 rounded-sm"
+              style={{ backgroundColor: PUBLIC_GRADE_COLORS['데이터 없음'] }}
+            />
+            데이터 없음 △
+          </span>
         </div>
       </div>
+
+      {/* 공공 데이터 상태 표시 (Mock/stale/마지막 수집시각) */}
+      {publicAir && (
+        <p className="rounded-md bg-sky-50 px-4 py-1.5 text-xs text-sky-800">
+          공공 실측 ({publicAir.sido} · 출처: 환경부·한국환경공단 AirKorea) · 측정소{' '}
+          {publicAir.stations.length}곳
+          {publicAir.collectedAt &&
+            ` · 수집 ${new Date(publicAir.collectedAt).toLocaleString('ko-KR')}`}
+          {publicAir.mock && (
+            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">
+              Mock 데이터 (서비스키 미설정)
+            </span>
+          )}
+          {publicAir.stale && (
+            <span className="ml-2 rounded bg-orange-100 px-1.5 py-0.5 font-medium text-orange-800">
+              {publicAir.message ?? '오래된 데이터 표시 중'}
+            </span>
+          )}
+        </p>
+      )}
+      {publicError && (
+        <p className="rounded-md bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
+          공공 대기질 데이터를 불러오지 못했습니다: {publicError} (자체 관측 레이어는 정상 표시)
+        </p>
+      )}
 
       {/* 시계열 컨트롤 */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm">
@@ -504,6 +655,10 @@ export default function MapPage() {
         박스를 클릭하면 상세정보가 표시됩니다 · 격자: 관측소당{' '}
         {MAP_CONFIG.grid.countX}x{MAP_CONFIG.grid.countY}x{MAP_CONFIG.grid.countZ} · ion 토큰
         없이 OSM 지도로 동작 (.env의 VITE_CESIUM_ION_TOKEN으로 위성영상 사용 가능)
+      </p>
+      <p className="text-xs text-gray-400">
+        공공 측정소의 막대 높이는 오염 농도를 비교하기 위한 시각적 표현입니다. 실제 오염층의
+        물리적 높이를 의미하지 않습니다.
       </p>
     </div>
   )
