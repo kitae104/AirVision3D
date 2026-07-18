@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import type {
   ApiResponse, CurrentAirQuality, InterpolationResult, PageResponse,
-  PollutantValue, PublicStationAir, Site,
+  PollutantValue, PublicStationAir, Site, WeatherNow,
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { MAP_CONFIG } from '../config/mapConfig'
@@ -267,6 +267,45 @@ function addPublicStation(ds: Cesium.CustomDataSource, station: PublicStationAir
   }
 }
 
+/**
+ * 풍향 화살표 추가. 기상청 풍향(VEC)은 바람이 불어오는 방향이므로
+ * 백엔드가 이동 방향(windArrowDegree)으로 변환한 값을 사용한다.
+ */
+function addWindArrow(ds: Cesium.CustomDataSource, lat: number, lng: number,
+                      weather: WeatherNow) {
+  if (weather.windArrowDegree == null || weather.windSpeed == null) return
+  const cfg = MAP_CONFIG.windArrow
+  // 풍속에 비례한 화살표 길이 (최소 0.6배 ~ 최대 2배)
+  const scale = Math.min(Math.max(weather.windSpeed / 4, 0.6), 2)
+  const lengthM = cfg.lengthM * scale
+  const rad = (weather.windArrowDegree * Math.PI) / 180
+  const mPerDegLat = 111_320
+  const mPerDegLng = 111_320 * Math.cos((lat * Math.PI) / 180)
+  const endLat = lat + (lengthM * Math.cos(rad)) / mPerDegLat
+  const endLng = lng + (lengthM * Math.sin(rad)) / mPerDegLng
+  const color = Cesium.Color.fromCssColorString(cfg.color)
+  ds.entities.add({
+    polyline: {
+      positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+        lng, lat, cfg.altitudeM, endLng, endLat, cfg.altitudeM,
+      ]),
+      width: 14,
+      material: new Cesium.PolylineArrowMaterialProperty(color),
+      clampToGround: false,
+    },
+    name: '바람 (기상청)',
+    description: `
+      <table class="cesium-infoBox-defaultTable"><tbody>
+        <tr><th>풍향</th><td>${weather.windDirectionText ?? '-'} (${weather.windDirectionDegree ?? '-'}°에서 불어옴)</td></tr>
+        <tr><th>풍속</th><td>${weather.windSpeed} m/s</td></tr>
+        <tr><th>기온</th><td>${weather.temperature ?? '-'} ℃</td></tr>
+        <tr><th>습도</th><td>${weather.humidity ?? '-'} %</td></tr>
+        <tr><th>강수형태</th><td>${weather.precipitationType ?? '-'}</td></tr>
+        <tr><th>출처</th><td>기상청 (화살표는 바람의 이동 방향)</td></tr>
+      </tbody></table>`,
+  })
+}
+
 /** Date → datetime-local 입력값 (로컬 타임존) */
 function toLocalInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -293,13 +332,28 @@ export default function MapPage() {
   const [pollutant, setPollutant] = useState<PublicPollutantKey>('pm25')
   const [publicAir, setPublicAir] = useState<CurrentAirQuality | null>(null)
   const [publicError, setPublicError] = useState<string | null>(null)
+  const [weather, setWeather] = useState<WeatherNow | null>(null)
 
-  /** 공공(AirKorea) 실시간 대기질 로드 — 자체 데이터 오류와 분리해 처리 */
+  /** 공공(AirKorea) 실시간 대기질 + 지역 기상 로드 — 자체 데이터 오류와 분리해 처리 */
   const loadPublicAir = async () => {
     setPublicError(null)
     try {
       const res = await apiClient.get<ApiResponse<CurrentAirQuality>>('/air-quality/current')
-      setPublicAir(res.data.data)
+      const data = res.data.data
+      setPublicAir(data)
+      // 좌표 있는 측정소들의 중심점 기준 기상 조회 (기상 실패는 무시하고 대기질만 표시)
+      const located = data.stations.filter((s) => s.locationAvailable)
+      if (located.length > 0) {
+        const centerLat = located.reduce((a, s) => a + (s.latitude ?? 0), 0) / located.length
+        const centerLng = located.reduce((a, s) => a + (s.longitude ?? 0), 0) / located.length
+        try {
+          const w = await apiClient.get<ApiResponse<WeatherNow>>(
+            `/weather/current?latitude=${centerLat.toFixed(5)}&longitude=${centerLng.toFixed(5)}`)
+          setWeather(w.data.data)
+        } catch {
+          setWeather(null)
+        }
+      }
     } catch (err) {
       setPublicAir(null)
       setPublicError(errorMessage(err))
@@ -490,7 +544,7 @@ export default function MapPage() {
     })
   }, [layers])
 
-  // 공공 대기질 레이어 렌더링 (데이터 또는 기준 오염물질 변경 시)
+  // 공공 대기질 레이어 렌더링 (데이터·기준 오염물질·기상 변경 시)
   useEffect(() => {
     const ds = dataSourcesRef.current
     if (!ds) return
@@ -499,7 +553,16 @@ export default function MapPage() {
     for (const station of publicAir.stations) {
       addPublicStation(ds.airkorea, station, pollutant)
     }
-  }, [publicAir, pollutant])
+    // 지역 중심 풍향 화살표 (기상청)
+    if (weather) {
+      const located = publicAir.stations.filter((s) => s.locationAvailable)
+      if (located.length > 0) {
+        const centerLat = located.reduce((a, s) => a + (s.latitude ?? 0), 0) / located.length
+        const centerLng = located.reduce((a, s) => a + (s.longitude ?? 0), 0) / located.length
+        addWindArrow(ds.airkorea, centerLat, centerLng, weather)
+      }
+    }
+  }, [publicAir, pollutant, weather])
 
   const flyToSite = (site: Site) => {
     viewerRef.current?.camera.flyTo({
@@ -589,6 +652,16 @@ export default function MapPage() {
           {publicAir.stations.length}곳
           {publicAir.collectedAt &&
             ` · 수집 ${new Date(publicAir.collectedAt).toLocaleString('ko-KR')}`}
+          {weather && (
+            <span className="ml-2 text-cyan-800">
+              | 기상(기상청): {weather.temperature != null && `${weather.temperature}℃`}
+              {weather.humidity != null && ` · 습도 ${weather.humidity}%`}
+              {weather.windSpeed != null &&
+                ` · ${weather.windDirectionText ?? ''} ${weather.windSpeed}m/s`}
+              {weather.precipitationType && weather.precipitationType !== '없음' &&
+                ` · 강수: ${weather.precipitationType}`}
+            </span>
+          )}
           {publicAir.mock && (
             <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">
               Mock 데이터 (서비스키 미설정)
