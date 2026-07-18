@@ -111,6 +111,18 @@ npm run dev
 # 확인: http://localhost:5173
 ```
 
+### 3-1. 데모 데이터 최신화 (선택)
+
+샘플 관측값은 최초 DB 구축 시점 기준으로 생성되므로, 며칠 지나면 대시보드의
+"최근 24시간" 차트가 비어 보일 수 있다. 시연 전에 아래를 실행하면 현재 시각 기준
+최근 7일 관측값을 삭제 없이 보충한다(기존 데이터 유지).
+
+```powershell
+cd backend
+.\gradlew.bat bootRun --args='--airvision.sample.reseed=true'
+# 리시드 로그 확인 후 종료(Ctrl+C). 이후 .\run.ps1 로 정상 실행
+```
+
 ### 4. 기본 계정
 
 백엔드 최초 기동 시 users 테이블이 비어 있으면 자동 생성된다.

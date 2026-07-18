@@ -362,8 +362,9 @@
 
 ### 알려진 문제
 
-- `GET /api/dashboard/hourly?hours=24`가 Phase 2 정적 샘플 데이터 기준 시간 경과로
-  때때로 빈 배열을 반환할 수 있음(위 상세 참고). Phase 11 범위 밖이라 이번 작업에서는
-  수정하지 않음 — 다음 샘플 데이터 재생성 시 또는 별도 태스크에서 처리 권장.
+- ~~`GET /api/dashboard/hourly?hours=24`가 Phase 2 정적 샘플 데이터 시간 경과로 빈 배열 반환~~
+  → **해결(2026-07-19)**: `SampleObservationReseeder`(플래그 기반 CommandLineRunner) 추가.
+  `bootRun --args='--airvision.sample.reseed=true'`로 현재 시각 기준 최근 7일 관측값을 삭제 없이
+  보충(ON CONFLICT DO NOTHING). 실 DB 검증: 대시보드 24시간 조회 0→24건, 통합 테스트 33/33 PASS.
 - `comparisonSnapshots`는 이번 실기동에서 0건(매칭되는 최근 AI 예측이 DB에 없었기 때문,
   Task4 설계상 정상 동작 — 예측을 먼저 실행해야 매칭 스냅샷이 쌓임).
