@@ -243,6 +243,8 @@
 - [x] 산출물 문서: requirements / architecture / database-design / api-spec /
       ai-model-design / ui-screen-spec / test-plan / deployment — COMPLETED
 - [x] 통합 실행 스크립트 run.ps1 (+-Stop) — VERIFIED
+- [x] 사용 설명서 docs/user-guide.html (초보자용, 지속 갱신 문서. CLAUDE.md 작업 절차 9항에
+      갱신 규칙 추가) — COMPLETED (2026-07-18)
 
 ### 잔여 항목 (사용자 확인 후 처리)
 
