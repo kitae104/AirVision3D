@@ -3,7 +3,7 @@ import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import type {
-  ApiResponse, CurrentAirQuality, InterpolationResult, PageResponse,
+  ApiResponse, CurrentAirQuality, IdwGridResponse, InterpolationResult, PageResponse,
   PollutantValue, PublicStationAir, Site, WeatherNow,
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
@@ -35,13 +35,14 @@ interface SeriesSite {
   samples: { time: string; pm25: number }[]
 }
 
-type LayerKey = 'observation' | 'prediction' | 'interpolation' | 'airkorea'
+type LayerKey = 'observation' | 'prediction' | 'interpolation' | 'airkorea' | 'idwSurface'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
   observation: '관측값',
   prediction: 'AI 예측값',
   interpolation: 'IDW 보간값',
   airkorea: '공공 대기질',
+  idwSurface: '실측 IDW 표면',
 }
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
@@ -306,6 +307,32 @@ function addWindArrow(ds: Cesium.CustomDataSource, lat: number, lng: number,
   })
 }
 
+/** 공공 실측 IDW 격자 표면: 셀별 색상 상자로 타일링 (높이 아닌 색으로 농도 표현). */
+function addIdwSurface(ds: Cesium.CustomDataSource, grid: IdwGridResponse) {
+  const n = grid.resolution
+  const cellLatDeg = (grid.bbox.maxLatitude - grid.bbox.minLatitude) / n
+  const cellLonDeg = (grid.bbox.maxLongitude - grid.bbox.minLongitude) / n
+  const mPerDegLat = 111_320
+  for (const c of grid.cells) {
+    const mPerDegLon = 111_320 * Math.cos((c.latitude * Math.PI) / 180)
+    const color = Cesium.Color.fromCssColorString(
+      PUBLIC_GRADE_COLORS[c.grade] ?? gradeOf(c.pm25).chart).withAlpha(0.45)
+    ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, 40),
+      box: {
+        dimensions: new Cesium.Cartesian3(cellLonDeg * mPerDegLon, cellLatDeg * mPerDegLat, 60),
+        material: color,
+      },
+      name: `실측 IDW 표면`,
+      description: `<table class="cesium-infoBox-defaultTable"><tbody>
+        <tr><th>보간 PM2.5</th><td><b>${c.pm25.toFixed(1)}</b> ㎍/㎥ (${c.grade})</td></tr>
+        <tr><th>좌표</th><td>${c.latitude.toFixed(4)}, ${c.longitude.toFixed(4)}</td></tr>
+        <tr><th>방식</th><td>AirKorea 실측 ${grid.sourceCount}곳 IDW (색으로 농도 표현)</td></tr>
+        </tbody></table>`,
+    })
+  }
+}
+
 /** Date → datetime-local 입력값 (로컬 타임존) */
 function toLocalInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -323,6 +350,7 @@ export default function MapPage() {
     prediction: true,
     interpolation: true,
     airkorea: true,
+    idwSurface: false,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
   const [from, setFrom] = useState('')
@@ -357,6 +385,21 @@ export default function MapPage() {
     } catch (err) {
       setPublicAir(null)
       setPublicError(errorMessage(err))
+    }
+  }
+
+  /** 공공 실측 IDW 격자 표면 로드 (실패해도 다른 레이어 무영향) */
+  const loadIdwSurface = async (sido?: string) => {
+    const ds = dataSourcesRef.current
+    if (!ds) return
+    try {
+      const q = sido ? `?sido=${encodeURIComponent(sido)}` : ''
+      const res = await apiClient.get<ApiResponse<IdwGridResponse>>(
+        `/air-quality/interpolation/grid${q}`)
+      ds.idwSurface.entities.removeAll()
+      addIdwSurface(ds.idwSurface, res.data.data)
+    } catch {
+      ds.idwSurface?.entities.removeAll()
     }
   }
 
@@ -497,6 +540,7 @@ export default function MapPage() {
       prediction: new Cesium.CustomDataSource('prediction'),
       interpolation: new Cesium.CustomDataSource('interpolation'),
       airkorea: new Cesium.CustomDataSource('airkorea'),
+      idwSurface: new Cesium.CustomDataSource('idwSurface'),
     }
     Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
@@ -552,6 +596,9 @@ export default function MapPage() {
     if (!publicAir) return
     for (const station of publicAir.stations) {
       addPublicStation(ds.airkorea, station, pollutant)
+    }
+    if (publicAir) {
+      loadIdwSurface(publicAir.sido)
     }
     // 지역 중심 풍향 화살표 (기상청)
     if (weather) {
