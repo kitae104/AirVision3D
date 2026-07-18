@@ -41,7 +41,7 @@ public class PublicDataCollector {
     private final CollectionProperties props;
     private final Clock clock;
 
-    public PublicDataCollector(AirKoreaService airKoreaService, KmaWeatherService weatherService,
+    PublicDataCollector(AirKoreaService airKoreaService, KmaWeatherService weatherService,
                                ComparisonService comparisonService,
                                PublicAirMeasurementRepository measurementRepo,
                                PublicWeatherObservationRepository weatherRepo,
