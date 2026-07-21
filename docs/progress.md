@@ -15,16 +15,17 @@
 | 3 | IDW 보간 | VERIFIED | 단위 테스트 + Python 교차검증(1e-6) + 실 DB API 검증 완료(2026-07-17). Modified IDW는 선택 |
 | 4 | AI 데이터 파이프라인 | VERIFIED | 전처리·분할·Dataset 테스트 25건 통과, 샘플 120장 생성·DataLoader 확인(2026-07-17) |
 | 5 | AI 모델 학습과 추론 | VERIFIED | 학습 CLI·추론 API·지표 6종 실검증 완료(2026-07-18). Spring 연동은 후속 |
-| 6 | 웹 대시보드 | COMPLETED | 화면 8종+JWT 인증 구현, 빌드·API 흐름 검증 완료. 브라우저 육안 확인만 대기(2026-07-18) |
-| 7 | CesiumJS 지도 | COMPLETED | 3D 레이어·격자·팝업·토글·카메라 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
-| 8 | 시계열 시각화 | COMPLETED | 시계열 API·Clock/Timeline·시간별 색상/라벨 구현, 빌드·API 검증 완료. 브라우저 육안 확인 대기(2026-07-18) |
+| 6 | 웹 대시보드 | VERIFIED | 브라우저 육안 확인 완료(2026-07-22, Playwright): 로그인·대시보드·관측·등록·예측·보간·성능·공공 전 화면 렌더 확인 |
+| 7 | CesiumJS 지도 | VERIFIED | 브라우저 육안 확인 완료(2026-07-22): 지도·마커·레이어 토글·InfoBox 팝업·카메라 이동 확인. StrictMode 비동기 경합 버그 발견·수정(아래 Phase 16) |
+| 8 | 시계열 시각화 | VERIFIED | 브라우저 육안 확인 완료(2026-07-22): 시계열 로드→900x 재생·시계열 격자·팝업·[현재값 보기] 복귀 확인 |
 | 9 | 통합 테스트와 배포 | VERIFIED | 통합 테스트 29건 통과, 산출물 문서 11종 작성(2026-07-18). 브라우저 육안 확인만 잔여 |
 | 10 | 공공 대기환경 API 연동 | COMPLETED | 5단계 구현(측정소·지도·기상·예보·AI비교), 테스트 103건 통과, 실 서비스키 검증 완료 |
 | 11 | 공공 데이터 시계열 축적 루프 | VERIFIED | 실 DB 실기동 검증(2026-07-18). 트랜잭션 버그 발견·수정, 수집 208건/재수집 멱등 확인, integration-test 33건 중 32 PASS(신규 4건 전부 PASS) |
 | 12 | 실측 IDW 격자 표면(2순위 첫 기능) | VERIFIED | 백엔드 테스트 126건, 실기동 검증(2026-07-19): 인천 cells=100·sourceCount=41·mock=false, 서울 sourceCount=38, resolution=25→400 확인 |
-| 13 | 시도 선택 UI + 공공 측정소 시계열 재생(2순위 나머지) | COMPLETED | 백엔드 테스트 128건, 신규 시계열 엔드포인트 실 DB 검증(2026-07-21): 인천 42측정소·5프레임·좌표포함, 서울 40곳 전환. 프론트 빌드 통과. 브라우저 육안 확인 대기 |
+| 13 | 시도 선택 UI + 공공 측정소 시계열 재생(2순위 나머지) | VERIFIED | 실 DB 검증(2026-07-21) + 브라우저 육안 확인(2026-07-22): 시도 전환 시 측정소·기상·IDW 표면 갱신·카메라 이동, 시계열→현재 복귀 시 공공 레이어 복원 확인 |
 | 14 | 프론트엔드 컴포넌트 테스트 도입(3순위 1번) | VERIFIED | Vitest+RTL 도입, config 순수함수·AlertBanner 렌더 테스트 20건 통과(2026-07-21). 빌드·oxlint 무영향 |
 | 15 | 경보 발령 시도 강조(3순위 2번) | COMPLETED | 지도 "경보 권역" 레이어(발령 시도 반투명 원). 경보=시도/예보권역 단위 확인 후 시도 강조로 확정. 요약 순수함수 테스트 5건 포함 25건 통과. 실 API 현재 활성경보 0건이라 육안 확인은 경보 발생 시/Mock에서 대기 |
+| 16 | 브라우저 육안 확인 + 지도 결함 2건 수정(3순위 3번) | VERIFIED | Playwright로 전 화면 육안 확인(2026-07-22), Phase 6·7·8·13 VERIFIED 승격. StrictMode 비동기 경합("요청 처리 중 오류")·OSM z>19 CORS 오류 수정 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -254,9 +255,9 @@
 
 ### 잔여 항목 (사용자 확인 후 처리)
 
-- Phase 6~8 브라우저 육안 확인 → 확인 시 해당 Phase VERIFIED 승격
+- ~~Phase 6~8 브라우저 육안 확인~~ → **완료(2026-07-22, Phase 16)**: 전 Phase VERIFIED 승격
 - 보류/선택: CSV 업로드(실측 데이터 확보 시), Modified IDW, EfficientNet 비교,
-  웹 ROI, CZML, 듀얼맵, 화면 캡처, 7x7x3 격자, 프론트 컴포넌트 테스트
+  웹 ROI, CZML, 듀얼맵, 화면 캡처, 7x7x3 격자, ~~프론트 컴포넌트 테스트~~(Phase 14 완료)
 
 ## 확인 대기 사항 (BLOCKED 아님, 기본 가정으로 진행 가능)
 
@@ -517,3 +518,47 @@ IDW로 보간해 지도에 색상 농도 면으로 표시하는 기능.
 - 수정: `frontend/src/config/mapConfig.ts`(alertRegion 색·설정),
   `frontend/src/pages/MapPage.tsx`(alertRegion 레이어·`addAlertRegion`·`loadAlerts`),
   `docs/user-guide.html`(§7 레이어 설명·v1.5)
+
+## Phase 16. 브라우저 육안 확인 + 지도 결함 2건 수정(3순위 3번) — VERIFIED (2026-07-22)
+
+Chrome 확장 연결이 안 되어 **Playwright**(플러그인)로 실 스택에 대해 전 화면을 육안 확인했다.
+사용자가 신고한 3D 지도 "요청 처리 중 오류가 발생했습니다"의 원인도 이 과정에서 확정·수정했다.
+
+### 발견·수정한 결함
+
+- [x] **StrictMode 비동기 경합(사용자 신고 오류의 원인)**: React StrictMode(개발 모드)의
+      이중 마운트에서, 첫 마운트의 `loadCurrent`가 API 응답 대기 중 Viewer #1이 파괴되고
+      응답 도착 후 파괴된 Viewer의 `viewer.clock` 접근 →
+      `TypeError: Cannot read properties of undefined (reading 'clock')` → catch가
+      일반 메시지("요청 처리 중 오류…")로 표시. 모든 API는 200이라 네트워크 원인이 아님을
+      Playwright 콘솔·네트워크 로그로 확정. **수정**: `loadCurrent`/`loadSeries`의 await 후
+      `viewerRef.current !== viewer || dataSourcesRef.current !== ds`면 중단하는 stale 가드
+      추가(재마운트·언마운트 공통 방어). catch에 `console.error` 로깅도 추가(원인 추적성).
+      수정 후 새 마운트에서 오류 메시지·콘솔 에러 0건 확인. ※ 이 버그는 Phase 7부터
+      잠복(육안 확인이 없어 미발견) — 시각 검증의 필요성을 보여준 사례
+- [x] **OSM 타일 z>19 CORS 콘솔 오류**: 크게 확대 시 OSM이 제공하지 않는 줌 레벨(z20~21)
+      타일을 요청해 CORS 오류가 쌓임 → `OpenStreetMapImageryProvider`에 `maximumLevel: 19`
+      설정(z19 타일 확대 표시, 기능 영향 없음)
+
+### 육안 확인 결과 (Playwright, 실 스택·실 DB·실 공공 API)
+
+- [x] **Phase 6**: 로그인(admin) → 대시보드(요약 카드 5종·공공 카드 5종·관측vs예측 차트·
+      누적 1,038건) · 관측 데이터(1,358건·91페이지·필터·삭제버튼) · 데이터 등록(폼 2종) ·
+      AI 예측(폼+최근 예측 이력 5건) · IDW 보간(p 입력·이력) · 모델 성능(회귀 지표 4종·
+      등급 정확도·혼동행렬·합성 데이터 경고) · 공공 대기질(올해 경보 이력 실데이터) 렌더 확인
+- [x] **Phase 7**: 3D 지도 렌더(OSM), 관측·예측·보간 마커, 공공 측정소 43곳 값+등급 라벨,
+      "데이터 없음 △" 처리, 레이어 체크박스 6종, InfoBox 팝업(격자 클릭) 확인
+- [x] **Phase 8**: [시계열 로드] → 900x 배속 재생 동작, 시계열 격자(등급색)·시각별 라벨,
+      Timeline 이동, [현재값 보기] 복귀 확인
+- [x] **Phase 13 신규 기능**: 시도 드롭다운 인천→서울 전환 시 측정소 40곳·기상(24.5℃)
+      갱신·IDW 표면 서울 bbox 재계산·카메라 flyTo 확인. 시계열→현재 복귀 시 공공 레이어
+      복원(이번 수정 버그) 확인. 공공 기준항목 KHAI 전환 시 라벨 갱신 확인
+- [x] **실측 IDW 표면**: 인천(서해 섬 포함 bbox)·서울 모두 등급색 반투명 면 렌더 확인
+- 미확인(데이터 사유): 경보 권역 원(활성 경보 0건 — 맑은 날 정상), 대시보드 시간별 차트
+      (샘플 시간 경과 — 시연 전 `--airvision.sample.reseed=true` 실행으로 해결, README §3-1),
+      대기질 예보(자정 직후 당일 예보 미발표 시간대 — 발표 후 정상 표시 예상)
+
+### 변경 파일
+
+- `frontend/src/pages/MapPage.tsx`(stale 가드 2곳·catch 로깅 2곳·OSM maximumLevel),
+  `docs/progress.md`(본 절·Phase 6/7/8/13 승격)

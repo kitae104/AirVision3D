@@ -597,6 +597,9 @@ export default function MapPage() {
         apiClient.get<ApiResponse<VizPoint[]>>('/viz/predictions/latest'),
         apiClient.get<ApiResponse<PageResponse<InterpolationResult>>>('/interpolations?size=100'),
       ])
+      // 응답 대기 중 언마운트·재마운트(StrictMode 이중 마운트 포함)로 viewer가 교체됐으면
+      // 파괴된 viewer를 건드리지 않고 중단한다 (구 viewer 접근 시 TypeError 발생).
+      if (viewerRef.current !== viewer || dataSourcesRef.current !== ds) return
       // 자체 레이어(관측·예측·보간)만 초기화한다. airkorea는 mode 변경 시 현재값 effect가,
       // idwSurface는 sido effect가 각각 관리하므로 여기서 지우지 않는다.
       ds.observation.entities.removeAll()
@@ -642,6 +645,7 @@ export default function MapPage() {
       viewer.clock.shouldAnimate = false
       setMode('current')
     } catch (err) {
+      console.error('[MapPage] loadCurrent 실패:', err)
       setError(errorMessage(err))
     } finally {
       setLoading(false)
@@ -675,6 +679,8 @@ export default function MapPage() {
               .catch(() => [] as PublicSeriesStation[])
           : Promise.resolve([] as PublicSeriesStation[]),
       ])
+      // 응답 대기 중 viewer가 교체·파괴됐으면 중단 (loadCurrent와 동일한 가드)
+      if (viewerRef.current !== viewer || dataSourcesRef.current !== ds) return
 
       if (obs.length === 0 && pub.length === 0) {
         setError('선택한 기간에 재생할 관측/공공 실측 데이터가 없습니다')
@@ -711,6 +717,7 @@ export default function MapPage() {
         setPublicError(`${sido} 시도의 누적 공공 실측이 아직 없어 자체 관측만 재생합니다`)
       }
     } catch (err) {
+      console.error('[MapPage] loadSeries 실패:', err)
       setError(errorMessage(err))
     } finally {
       setLoading(false)
@@ -731,6 +738,9 @@ export default function MapPage() {
             Promise.resolve(
               new Cesium.OpenStreetMapImageryProvider({
                 url: 'https://tile.openstreetmap.org/',
+                // OSM 타일은 z19까지만 제공 — 그 이상 확대 시 없는 타일을 요청해
+                // CORS 오류가 콘솔에 쌓이는 것을 방지 (z19 타일을 확대 표시)
+                maximumLevel: 19,
               }),
             ),
           ),
