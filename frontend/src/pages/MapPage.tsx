@@ -752,6 +752,9 @@ export default function MapPage() {
       animation: true, // 재생/일시정지/배속 위젯
       timeline: true,
       fullscreenButton: true,
+      // 미지정 시 document.body(페이지 전체)가 전체화면 대상이 되어
+      // 지도 크기가 변하지 않는 것처럼 보임 → 지도 컨테이너를 대상으로 지정
+      fullscreenElement: containerRef.current,
     })
     viewer.scene.globe.depthTestAgainstTerrain = false
     viewer.clock.shouldAnimate = false
