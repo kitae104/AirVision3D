@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.airvision.backend.publicdata.history.PublicAirMeasurementRepository.HourlyAvg;
 import com.airvision.backend.publicdata.history.dto.ComparisonHistoryPoint;
 import com.airvision.backend.publicdata.history.dto.MeasurementHourlyPoint;
+import com.airvision.backend.publicdata.history.dto.PublicStationSeries;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -101,6 +102,50 @@ class PublicDataHistoryServiceTest {
         when(measurementRepo.findHourlyAvg(isNull(), any(), any())).thenReturn(java.util.List.of());
         Instant from = NOW.minus(java.time.Duration.ofDays(31));
         assertThat(service.hourly(null, from, NOW)).isEmpty();
+    }
+
+    private static PublicAirMeasurement measurement(
+            String station, double lat, double lng, Instant at, Double pm25, String grade) {
+        PublicAirMeasurement m = mock(PublicAirMeasurement.class);
+        when(m.getStationName()).thenReturn(station);
+        when(m.getLatitude()).thenReturn(lat);
+        when(m.getLongitude()).thenReturn(lng);
+        when(m.getMeasuredAt()).thenReturn(at);
+        when(m.getPm25()).thenReturn(pm25);
+        when(m.getPm25Grade()).thenReturn(grade);
+        return m;
+    }
+
+    @Test
+    void 시도_시계열을_측정소별로_묶고_최신좌표를_쓴다() {
+        Instant t1 = Instant.parse("2026-07-18T03:00:00Z");
+        Instant t2 = Instant.parse("2026-07-18T04:00:00Z");
+        // 조회는 (측정소명, 시각) 오름차순 정렬로 들어온다.
+        // (mock 스터빙을 when() 인자 안에서 하면 UnfinishedStubbing이 나므로 리스트를 먼저 만든다)
+        List<PublicAirMeasurement> rows = List.of(
+                measurement("송도", 37.38, 126.66, t1, 12.0, "좋음"),
+                measurement("송도", 37.39, 126.67, t2, 18.0, "보통"),
+                measurement("부평", 37.49, 126.72, t2, 25.0, "보통"));
+        when(measurementRepo.findRegionSeries(eq("인천"), any(), any())).thenReturn(rows);
+
+        List<PublicStationSeries> series = service.regionSeries("인천",
+                Instant.parse("2026-07-18T00:00:00Z"), NOW);
+
+        assertThat(series).hasSize(2);
+        PublicStationSeries songdo = series.stream()
+                .filter(s -> s.stationName().equals("송도")).findFirst().orElseThrow();
+        assertThat(songdo.samples()).hasSize(2);
+        assertThat(songdo.samples().get(0).pm25()).isEqualTo(12.0);
+        assertThat(songdo.samples().get(1).pm25()).isEqualTo(18.0);
+        // 대표 좌표는 마지막(최신) 측정의 좌표
+        assertThat(songdo.latitude()).isEqualTo(37.39);
+        assertThat(songdo.longitude()).isEqualTo(126.67);
+    }
+
+    @Test
+    void 시도가_비면_예외다() {
+        assertThatThrownBy(() -> service.regionSeries("  ", null, null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

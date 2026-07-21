@@ -3,7 +3,7 @@
 > 상태 정의: NOT_STARTED / IN_PROGRESS / BLOCKED / COMPLETED(코드 작성 완료) / VERIFIED(실행·테스트 성공 확인)
 > 갱신 규칙: 각 작업 완료 시 본 문서를 갱신한다. 테스트를 실행하지 못한 경우 사유를 기록한다.
 
-최종 갱신: 2026-07-19
+최종 갱신: 2026-07-21
 
 ## Phase 요약
 
@@ -22,6 +22,7 @@
 | 10 | 공공 대기환경 API 연동 | COMPLETED | 5단계 구현(측정소·지도·기상·예보·AI비교), 테스트 103건 통과, 실 서비스키 검증 완료 |
 | 11 | 공공 데이터 시계열 축적 루프 | VERIFIED | 실 DB 실기동 검증(2026-07-18). 트랜잭션 버그 발견·수정, 수집 208건/재수집 멱등 확인, integration-test 33건 중 32 PASS(신규 4건 전부 PASS) |
 | 12 | 실측 IDW 격자 표면(2순위 첫 기능) | VERIFIED | 백엔드 테스트 126건, 실기동 검증(2026-07-19): 인천 cells=100·sourceCount=41·mock=false, 서울 sourceCount=38, resolution=25→400 확인 |
+| 13 | 시도 선택 UI + 공공 측정소 시계열 재생(2순위 나머지) | COMPLETED | 백엔드 테스트 128건, 신규 시계열 엔드포인트 실 DB 검증(2026-07-21): 인천 42측정소·5프레임·좌표포함, 서울 40곳 전환. 프론트 빌드 통과. 브라우저 육안 확인 대기 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -403,3 +404,60 @@ IDW로 보간해 지도에 색상 농도 면으로 표시하는 기능.
 
 - `docs/progress.md`(본 절), `docs/user-guide.html`(§7 레이어 설명·버전 갱신)
 - 소스 코드 변경 없음(검증·문서만)
+
+## Phase 13. 시도 선택 UI + 공공 측정소 시계열 재생(2순위 나머지) — COMPLETED (2026-07-21)
+
+2순위 제안의 나머지 두 항목을 구현했다. (a) 실측 IDW는 Phase 12에서 완료했고, 여기서
+(b) 공공 측정소 시계열 재생과 (c) 시도 선택 UI를 마무리해 2순위를 종료한다.
+
+### (c) 시도 선택 UI — 프론트 전용
+
+- [x] `frontend/src/config/sido.ts` 신규: AirKorea 17개 시도명 + flyTo용 대략 중심좌표
+      (백엔드 `AirKoreaService.SIDO_NAMES`와 동일 목록 유지)
+- [x] MapPage 툴바에 시도 드롭다운 추가 → 선택 시 `/air-quality/current?sido=` 재조회로
+      airkorea 측정소·풍향 갱신, IDW 표면은 `publicAir.sido` 변경에 따라 자동 재요청,
+      해당 시도 중심으로 카메라 flyTo. 최초 로드 시 백엔드 해석 시도로 드롭다운 동기화
+- [x] 백엔드는 무변경(이미 `?sido=` 지원). 실 API 경로 검증: `current?sido=서울` → 40측정소
+      mock=false (Phase 10·12에서 서울 38·인천 41 소스도 기검증)
+
+### (b) 공공 측정소 시계열 재생 — 백엔드 + 프론트
+
+- [x] 백엔드 신규 엔드포인트 `GET /api/public-data/history/measurements/series?sido=&from=&to=`
+      → 시도 내 측정소별 누적 PM2.5 시계열을 **좌표 포함**으로 반환
+      (`PublicStationSeries(stationName, latitude, longitude, samples[])`,
+      `Sample(measuredAt, pm25, pm25Grade)`). 좌표·pm25 있는 측정만 담고, 측정소 대표 좌표는
+      최신 측정 좌표 사용. 리포지토리 `findRegionSeries` 네이티브 쿼리(측정소·시각 정렬),
+      서비스 `regionSeries`(순차 그룹핑, sido 필수 검증). 기존 이력 서비스·엔티티 재사용
+- [x] 프론트 MapPage: `addPublicTimeSeries`(색이 시간에 따라 변하는 원기둥+라벨, 등급색,
+      데이터 없는 시간 availability 숨김) 추가. `loadSeries`가 자체 관측 시계열과 공공 실측
+      시계열을 함께 로드(한쪽이 비어도 다른 쪽 재생), 동일 Clock/Timeline로 동시 재생
+- [x] 백엔드 테스트 128건 통과(신규 서비스 테스트 2건: 측정소별 그룹핑·최신좌표, sido 필수)
+- [x] **실 DB 스모크 검증(2026-07-21)**: 누적 832건(2026-07-18~) 위에서
+      `series?sido=인천` → 측정소 42곳, 지역 전체 distinct measuredAt 5프레임, 각 측정소
+      좌표·pm25·등급 포함. sido 누락 → 400. (네이티브 쿼리는 Phase 11 `@Transactional`
+      사례처럼 mock 테스트가 못 잡는 실 DB 결함 가능성이 있어 실기동으로 재확인)
+
+### 함께 수정한 잠복 버그
+
+- [x] `loadCurrent`가 전체 데이터소스를 초기화하면서 airkorea·idwSurface까지 지웠으나
+      복구하지 않아, 시계열→현재값 복귀 시 공공/IDW 레이어가 사라지던 문제 수정.
+      이제 `loadCurrent`는 자체 레이어(관측·예측·보간)만 초기화하고, airkorea는 mode 변경
+      effect가, idwSurface는 sido effect가 각각 복원한다
+- [x] (IDW 최종리뷰 Minor #5) 오염물질·기상 변경 시 `/interpolation/grid`가 불필요하게
+      재요청되던 문제 → IDW 표면 로드를 `publicAir.sido` 의존 별도 effect로 분리
+
+### 변경 파일
+
+- 신규: `frontend/src/config/sido.ts`,
+  `backend/.../publicdata/history/dto/PublicStationSeries.java`
+- 백엔드: `PublicDataHistoryController`(series 엔드포인트), `PublicDataHistoryService`
+  (`regionSeries`), `PublicAirMeasurementRepository`(`findRegionSeries`),
+  `PublicDataHistoryServiceTest`(테스트 2건)
+- 프론트: `MapPage.tsx`(시도 드롭다운·`changeSido`·`addPublicTimeSeries`·
+  `renderAirkoreaCurrentLayer`·`loadSeries` 확장·effect 정리), `docs/user-guide.html`
+
+### 미완료 / 알려진 제약
+
+- 브라우저 육안 확인 대기(다른 지도 기능과 동일): `/map`에서 시도 전환·시계열 재생 시각 확인
+- 시계열 재생 프레임 수는 누적량에 비례 — 현재 3일간 5프레임(스택이 매시간 켜져 있지 않아
+  sporadic 수집). 매시간 수집이 지속되면 프레임이 촘촘해진다(코드 결함 아님)

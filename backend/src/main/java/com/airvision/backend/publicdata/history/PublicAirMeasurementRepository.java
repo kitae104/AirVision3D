@@ -61,6 +61,21 @@ public interface PublicAirMeasurementRepository extends JpaRepository<PublicAirM
     List<PublicAirMeasurement> findByStationNameAndMeasuredAtBetweenOrderByMeasuredAt(
             String stationName, Instant from, Instant to);
 
+    /**
+     * 시도 내 좌표·pm25가 있는 측정을 (측정소명, 시각) 순으로 반환.
+     * 서비스에서 측정소별로 묶어 시계열 재생용 응답을 만든다.
+     */
+    @Query(value = """
+            SELECT * FROM public_air_measurement
+            WHERE sido = :sido
+              AND measured_at BETWEEN :from AND :to
+              AND latitude IS NOT NULL AND longitude IS NOT NULL AND pm25 IS NOT NULL
+            ORDER BY station_name ASC, measured_at ASC
+            """, nativeQuery = true)
+    List<PublicAirMeasurement> findRegionSeries(@Param("sido") String sido,
+                                                @Param("from") Instant from,
+                                                @Param("to") Instant to);
+
     @Modifying
     @Transactional
     void deleteByMeasuredAtBefore(Instant cutoff);
