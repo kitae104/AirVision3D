@@ -3,11 +3,15 @@ package com.airvision.backend.publicdata.history;
 import com.airvision.backend.publicdata.history.dto.ComparisonHistoryPoint;
 import com.airvision.backend.publicdata.history.dto.MeasurementHourlyPoint;
 import com.airvision.backend.publicdata.history.dto.MeasurementSeriesPoint;
+import com.airvision.backend.publicdata.history.dto.PublicStationSeries;
 import com.airvision.backend.publicdata.history.dto.WeatherSeriesPoint;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +60,34 @@ public class PublicDataHistoryService {
                         stationName, range[0], range[1]).stream()
                 .map(MeasurementSeriesPoint::from)
                 .toList();
+    }
+
+    /**
+     * 시도 내 측정소별 누적 PM2.5 시계열 (지도 시계열 재생용). 좌표·pm25가 있는 측정만 담고,
+     * 측정소 대표 좌표는 해당 측정소의 마지막(최신) 좌표를 사용한다.
+     */
+    public List<PublicStationSeries> regionSeries(String sido, Instant from, Instant to) {
+        if (sido == null || sido.isBlank()) {
+            throw new IllegalArgumentException("sido는 필수입니다");
+        }
+        Instant[] range = range(from, to);
+        // (측정소명, 시각) 정렬로 조회되므로 순차 그룹핑 가능
+        Map<String, List<PublicStationSeries.Sample>> samplesByStation = new LinkedHashMap<>();
+        Map<String, double[]> coordByStation = new LinkedHashMap<>();
+        for (PublicAirMeasurement m : measurementRepo.findRegionSeries(sido.trim(), range[0], range[1])) {
+            String name = m.getStationName();
+            samplesByStation.computeIfAbsent(name, k -> new ArrayList<>())
+                    .add(new PublicStationSeries.Sample(
+                            m.getMeasuredAt(), m.getPm25(), m.getPm25Grade()));
+            // 마지막(최신) 좌표로 갱신 — 시각 오름차순이므로 순차 갱신이면 최신값이 남는다
+            coordByStation.put(name, new double[]{m.getLatitude(), m.getLongitude()});
+        }
+        List<PublicStationSeries> result = new ArrayList<>(samplesByStation.size());
+        for (Map.Entry<String, List<PublicStationSeries.Sample>> e : samplesByStation.entrySet()) {
+            double[] coord = coordByStation.get(e.getKey());
+            result.add(new PublicStationSeries(e.getKey(), coord[0], coord[1], e.getValue()));
+        }
+        return result;
     }
 
     public List<WeatherSeriesPoint> weatherSeries(String sido, Instant from, Instant to) {

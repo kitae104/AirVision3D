@@ -8,6 +8,7 @@ import type {
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { MAP_CONFIG } from '../config/mapConfig'
+import { SIDO_CENTERS, SIDO_VIEW_HEIGHT } from '../config/sido'
 import {
   PUBLIC_GRADE_COLORS, PUBLIC_POLLUTANTS, VALUE_STATUS_LABELS,
   displayHeightM, publicGradeOf,
@@ -35,6 +36,14 @@ interface SeriesSite {
   samples: { time: string; pm25: number }[]
 }
 
+/** 공공 측정소 누적 시계열 (지도 재생용) — 백엔드 PublicStationSeries와 대응 */
+interface PublicSeriesStation {
+  stationName: string
+  latitude: number
+  longitude: number
+  samples: { measuredAt: string; pm25: number; pm25Grade: string | null }[]
+}
+
 type LayerKey = 'observation' | 'prediction' | 'interpolation' | 'airkorea' | 'idwSurface'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
@@ -47,6 +56,9 @@ const LAYER_LABELS: Record<LayerKey, string> = {
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
 const SAMPLE_DURATION_SEC = 3600
+
+/** 공공 실측 시계열 막대 높이(m). 농도는 색으로 표현하므로 높이는 고정. */
+const PUBLIC_SERIES_BAR_LENGTH_M = 2500
 
 function pm25Color(pm25: number, alpha: number): Cesium.Color {
   return Cesium.Color.fromCssColorString(gradeOf(pm25).chart).withAlpha(alpha)
@@ -333,6 +345,98 @@ function addIdwSurface(ds: Cesium.CustomDataSource, grid: IdwGridResponse) {
   }
 }
 
+/**
+ * 공공 측정소 1곳의 누적 시계열을 색이 변하는 원기둥 + 라벨로 표시.
+ * 농도는 색(등급)으로 표현하며, 데이터 없는 시간은 availability로 숨긴다.
+ */
+function addPublicTimeSeries(ds: Cesium.CustomDataSource, station: PublicSeriesStation) {
+  const colorProp = new Cesium.TimeIntervalCollectionProperty()
+  const outlineProp = new Cesium.TimeIntervalCollectionProperty()
+  const labelProp = new Cesium.TimeIntervalCollectionProperty()
+  const availability = new Cesium.TimeIntervalCollection()
+
+  for (const sample of station.samples) {
+    const start = Cesium.JulianDate.fromIso8601(sample.measuredAt)
+    const stop = Cesium.JulianDate.addSeconds(start, SAMPLE_DURATION_SEC, new Cesium.JulianDate())
+    const opts = { start, stop, isStartIncluded: true, isStopIncluded: false }
+    const grade = sample.pm25Grade ?? publicGradeOf('pm25', sample.pm25)
+    const css = PUBLIC_GRADE_COLORS[grade] ?? PUBLIC_GRADE_COLORS['데이터 없음']
+    const color = Cesium.Color.fromCssColorString(css)
+    colorProp.intervals.addInterval(
+      new Cesium.TimeInterval({ ...opts, data: color.withAlpha(MAP_CONFIG.publicBar.alpha) }))
+    outlineProp.intervals.addInterval(
+      new Cesium.TimeInterval({ ...opts, data: color.withAlpha(0.9) }))
+    labelProp.intervals.addInterval(
+      new Cesium.TimeInterval({
+        ...opts,
+        data: `${station.stationName}\n${sample.pm25.toFixed(1)}㎍/㎥ ${grade}`,
+      }))
+    availability.addInterval(new Cesium.TimeInterval(opts))
+  }
+
+  const length = PUBLIC_SERIES_BAR_LENGTH_M
+  // 색이 시간에 따라 변하는 농도 막대 (높이는 고정, 농도는 색으로 표현)
+  ds.entities.add({
+    availability,
+    position: Cesium.Cartesian3.fromDegrees(station.longitude, station.latitude, length / 2),
+    cylinder: {
+      length,
+      topRadius: MAP_CONFIG.publicBar.radius,
+      bottomRadius: MAP_CONFIG.publicBar.radius,
+      material: new Cesium.ColorMaterialProperty(colorProp),
+      outline: true,
+      outlineColor: outlineProp,
+    },
+    name: `${station.stationName} (공공 실측 시계열)`,
+    description: buildDescription('공공 실측 시계열', null, undefined,
+      station.latitude, station.longitude),
+  })
+  // 시간에 따라 값이 변하는 라벨 마커
+  ds.entities.add({
+    availability,
+    position: Cesium.Cartesian3.fromDegrees(station.longitude, station.latitude, 10),
+    point: {
+      pixelSize: 10,
+      color: Cesium.Color.fromCssColorString(MAP_CONFIG.markers.airkorea),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+    label: {
+      text: labelProp,
+      font: '12px sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -16),
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      showBackground: false,
+    },
+    name: `${station.stationName} (공공 실측 시계열)`,
+    description: buildDescription('공공 실측 시계열', null, undefined,
+      station.latitude, station.longitude),
+  })
+}
+
+/** 공공 현재값 airkorea 레이어 렌더링 (측정소 막대 + 지역 풍향). 현재값 모드에서 재사용. */
+function renderAirkoreaCurrentLayer(ds: Cesium.CustomDataSource,
+                                    air: CurrentAirQuality, pollutant: PublicPollutantKey,
+                                    weather: WeatherNow | null) {
+  ds.entities.removeAll()
+  for (const station of air.stations) {
+    addPublicStation(ds, station, pollutant)
+  }
+  if (weather) {
+    const located = air.stations.filter((s) => s.locationAvailable)
+    if (located.length > 0) {
+      const centerLat = located.reduce((a, s) => a + (s.latitude ?? 0), 0) / located.length
+      const centerLng = located.reduce((a, s) => a + (s.longitude ?? 0), 0) / located.length
+      addWindArrow(ds, centerLat, centerLng, weather)
+    }
+  }
+}
+
 /** Date → datetime-local 입력값 (로컬 타임존) */
 function toLocalInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -361,14 +465,18 @@ export default function MapPage() {
   const [publicAir, setPublicAir] = useState<CurrentAirQuality | null>(null)
   const [publicError, setPublicError] = useState<string | null>(null)
   const [weather, setWeather] = useState<WeatherNow | null>(null)
+  const [selectedSido, setSelectedSido] = useState('')
 
   /** 공공(AirKorea) 실시간 대기질 + 지역 기상 로드 — 자체 데이터 오류와 분리해 처리 */
-  const loadPublicAir = async () => {
+  const loadPublicAir = async (sido?: string) => {
     setPublicError(null)
     try {
-      const res = await apiClient.get<ApiResponse<CurrentAirQuality>>('/air-quality/current')
+      const q = sido ? `?sido=${encodeURIComponent(sido)}` : ''
+      const res = await apiClient.get<ApiResponse<CurrentAirQuality>>(`/air-quality/current${q}`)
       const data = res.data.data
       setPublicAir(data)
+      // 최초 로드 시 드롭다운을 백엔드가 해석한 실제 시도로 동기화
+      setSelectedSido((prev) => prev || data.sido)
       // 좌표 있는 측정소들의 중심점 기준 기상 조회 (기상 실패는 무시하고 대기질만 표시)
       const located = data.stations.filter((s) => s.locationAvailable)
       if (located.length > 0) {
@@ -416,7 +524,11 @@ export default function MapPage() {
         apiClient.get<ApiResponse<VizPoint[]>>('/viz/predictions/latest'),
         apiClient.get<ApiResponse<PageResponse<InterpolationResult>>>('/interpolations?size=100'),
       ])
-      Object.values(ds).forEach((d) => d.entities.removeAll())
+      // 자체 레이어(관측·예측·보간)만 초기화한다. airkorea는 mode 변경 시 현재값 effect가,
+      // idwSurface는 sido effect가 각각 관리하므로 여기서 지우지 않는다.
+      ds.observation.entities.removeAll()
+      ds.prediction.entities.removeAll()
+      ds.interpolation.entities.removeAll()
 
       for (const o of obsRes.data.data) {
         addMarker(ds.observation, o.longitude, o.latitude, o.siteName,
@@ -473,17 +585,37 @@ export default function MapPage() {
     try {
       const fromIso = new Date(from).toISOString()
       const toIso = new Date(to).toISOString()
-      const res = await apiClient.get<ApiResponse<SeriesSite[]>>(
-        `/viz/observations/series?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`)
-      if (res.data.data.length === 0) {
-        setError('선택한 기간에 관측 데이터가 없습니다')
+      const window = `from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`
+      const sido = selectedSido || publicAir?.sido
+
+      // 자체 관측 시계열과 공공 측정소 시계열을 함께 로드 (한쪽이 비어도 다른 쪽은 재생)
+      const [obs, pub] = await Promise.all([
+        apiClient
+          .get<ApiResponse<SeriesSite[]>>(`/viz/observations/series?${window}`)
+          .then((r) => r.data.data)
+          .catch(() => [] as SeriesSite[]),
+        sido
+          ? apiClient
+              .get<ApiResponse<PublicSeriesStation[]>>(
+                `/public-data/history/measurements/series?sido=${encodeURIComponent(sido)}&${window}`)
+              .then((r) => r.data.data)
+              .catch(() => [] as PublicSeriesStation[])
+          : Promise.resolve([] as PublicSeriesStation[]),
+      ])
+
+      if (obs.length === 0 && pub.length === 0) {
+        setError('선택한 기간에 재생할 관측/공공 실측 데이터가 없습니다')
         return
       }
 
-      // 시계열은 관측 레이어에 표시 (예측/보간 레이어는 최신값 유지)
+      // 자체 관측 → observation 레이어, 공공 실측 → airkorea 레이어 (예측/보간은 최신값 유지)
       ds.observation.entities.removeAll()
-      for (const site of res.data.data) {
+      for (const site of obs) {
         addTimeSeriesSite(ds.observation, site)
+      }
+      ds.airkorea.entities.removeAll()
+      for (const station of pub) {
+        addPublicTimeSeries(ds.airkorea, station)
       }
 
       // Cesium Clock / Timeline 설정 (재생·일시정지·배속은 애니메이션 위젯 제공)
@@ -497,7 +629,14 @@ export default function MapPage() {
       viewer.clock.shouldAnimate = true
       viewer.timeline?.zoomTo(start, stop)
       setMode('series')
-      setLayers((prev) => ({ ...prev, observation: true }))
+      setLayers((prev) => ({
+        ...prev,
+        observation: obs.length > 0 ? true : prev.observation,
+        airkorea: pub.length > 0 ? true : prev.airkorea,
+      }))
+      if (pub.length === 0 && sido) {
+        setPublicError(`${sido} 시도의 누적 공공 실측이 아직 없어 자체 관측만 재생합니다`)
+      }
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -588,28 +727,23 @@ export default function MapPage() {
     })
   }, [layers])
 
-  // 공공 대기질 레이어 렌더링 (데이터·기준 오염물질·기상 변경 시)
+  // 공공 대기질 현재값 레이어 렌더링. 시계열 모드에서는 재생 엔티티를 유지하고,
+  // 현재값 모드로 돌아오면(mode 변경) 현재 측정소·풍향을 다시 그린다.
   useEffect(() => {
     const ds = dataSourcesRef.current
-    if (!ds) return
-    ds.airkorea.entities.removeAll()
-    if (!publicAir) return
-    for (const station of publicAir.stations) {
-      addPublicStation(ds.airkorea, station, pollutant)
+    if (!ds || mode !== 'current') return
+    if (!publicAir) {
+      ds.airkorea.entities.removeAll()
+      return
     }
-    if (publicAir) {
-      loadIdwSurface(publicAir.sido)
-    }
-    // 지역 중심 풍향 화살표 (기상청)
-    if (weather) {
-      const located = publicAir.stations.filter((s) => s.locationAvailable)
-      if (located.length > 0) {
-        const centerLat = located.reduce((a, s) => a + (s.latitude ?? 0), 0) / located.length
-        const centerLng = located.reduce((a, s) => a + (s.longitude ?? 0), 0) / located.length
-        addWindArrow(ds.airkorea, centerLat, centerLng, weather)
-      }
-    }
-  }, [publicAir, pollutant, weather])
+    renderAirkoreaCurrentLayer(ds.airkorea, publicAir, pollutant, weather)
+  }, [publicAir, pollutant, weather, mode])
+
+  // 실측 IDW 격자 표면: 시도 변경 시에만 재요청 (오염물질·기상 변경과 무관)
+  useEffect(() => {
+    if (publicAir?.sido) loadIdwSurface(publicAir.sido)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicAir?.sido])
 
   const flyToSite = (site: Site) => {
     viewerRef.current?.camera.flyTo({
@@ -617,6 +751,21 @@ export default function MapPage() {
       orientation: { pitch: Cesium.Math.toRadians(-35) },
       duration: 1.8,
     })
+  }
+
+  /** 시도 선택 → 공공 대기질 재조회(IDW·측정소 갱신) + 해당 시도로 카메라 이동 */
+  const changeSido = (sido: string) => {
+    if (!sido || sido === selectedSido) return
+    setSelectedSido(sido)
+    loadPublicAir(sido)
+    const center = SIDO_CENTERS.find((c) => c.name === sido)
+    if (center) {
+      viewerRef.current?.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(
+          center.longitude, center.latitude, SIDO_VIEW_HEIGHT),
+        duration: 1.8,
+      })
+    }
   }
 
   return (
@@ -656,6 +805,22 @@ export default function MapPage() {
             </option>
           ))}
         </select>
+
+        <label className="flex items-center gap-1.5 text-sm text-gray-700">
+          <span className="text-gray-500">시도</span>
+          <select
+            value={selectedSido}
+            onChange={(e) => changeSido(e.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {!selectedSido && <option value="" disabled>불러오는 중...</option>}
+            {SIDO_CENTERS.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {layers.airkorea && (
           <label className="flex items-center gap-1.5 text-sm text-gray-700">
@@ -761,8 +926,8 @@ export default function MapPage() {
         )}
         <span className="text-xs text-gray-400">
           {mode === 'series'
-            ? '좌측 하단 위젯으로 재생·일시정지·배속, 하단 Timeline으로 시간 이동'
-            : '기간 선택 후 [시계열 로드]를 누르면 시간 재생 모드로 전환됩니다'}
+            ? '자체 관측 + 공공 실측 함께 재생 · 좌측 하단 위젯으로 재생·배속, 하단 Timeline으로 이동'
+            : '기간 선택 후 [시계열 로드] → 자체 관측·공공 실측(선택 시도) 시간 재생 모드로 전환'}
         </span>
       </div>
 

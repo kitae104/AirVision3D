@@ -3,6 +3,7 @@ package com.airvision.backend.publicdata.history;
 import com.airvision.backend.common.ApiResponse;
 import com.airvision.backend.publicdata.history.dto.MeasurementHourlyPoint;
 import com.airvision.backend.publicdata.history.dto.MeasurementSeriesPoint;
+import com.airvision.backend.publicdata.history.dto.PublicStationSeries;
 import com.airvision.backend.publicdata.history.dto.WeatherSeriesPoint;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -48,6 +49,17 @@ public class PublicDataHistoryController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         return ApiResponse.ok(historyService.stationSeries(stationName, from, to));
+    }
+
+    @Operation(summary = "시도 내 측정소별 누적 실측 시계열 (좌표 포함, 3D 지도 재생용)")
+    @GetMapping("/measurements/series")
+    public ApiResponse<List<PublicStationSeries>> regionSeries(
+            @RequestParam String sido,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+        return ApiResponse.ok(historyService.regionSeries(sido, from, to));
     }
 
     @Operation(summary = "시도별 누적 기상 시계열")
