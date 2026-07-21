@@ -117,4 +117,25 @@ class PublicIdwServiceTest {
         assertThat(res.resolution()).isEqualTo(12);
         assertThat(res.cells()).hasSize(144);
     }
+
+    @Test
+    void power_resolution_경계값은_허용된다() {
+        givenStations(station("송도", 37.4, 126.7, true, 20.0, true));
+
+        assertThat(service.grid("인천", 0.1, 2).cells()).hasSize(4);
+        assertThat(service.grid("인천", 10.0, 20).cells()).hasSize(400);
+    }
+
+    @Test
+    void 소스_한_점이면_bbox가_최소_여백만큼_확장된다() {
+        givenStations(station("송도", 37.4, 126.7, true, 20.0, true));
+
+        IdwGridResponse res = service.grid("인천", 2.0, 4);
+
+        // span=0이므로 위경도 모두 MIN_MARGIN_DEG(0.05)씩 양방향 확장
+        assertThat(res.bbox().minLatitude()).isEqualTo(37.4 - 0.05);
+        assertThat(res.bbox().maxLatitude()).isEqualTo(37.4 + 0.05);
+        assertThat(res.bbox().minLongitude()).isEqualTo(126.7 - 0.05);
+        assertThat(res.bbox().maxLongitude()).isEqualTo(126.7 + 0.05);
+    }
 }
