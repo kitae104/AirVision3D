@@ -24,6 +24,7 @@
 | 12 | 실측 IDW 격자 표면(2순위 첫 기능) | VERIFIED | 백엔드 테스트 126건, 실기동 검증(2026-07-19): 인천 cells=100·sourceCount=41·mock=false, 서울 sourceCount=38, resolution=25→400 확인 |
 | 13 | 시도 선택 UI + 공공 측정소 시계열 재생(2순위 나머지) | COMPLETED | 백엔드 테스트 128건, 신규 시계열 엔드포인트 실 DB 검증(2026-07-21): 인천 42측정소·5프레임·좌표포함, 서울 40곳 전환. 프론트 빌드 통과. 브라우저 육안 확인 대기 |
 | 14 | 프론트엔드 컴포넌트 테스트 도입(3순위 1번) | VERIFIED | Vitest+RTL 도입, config 순수함수·AlertBanner 렌더 테스트 20건 통과(2026-07-21). 빌드·oxlint 무영향 |
+| 15 | 경보 발령 시도 강조(3순위 2번) | COMPLETED | 지도 "경보 권역" 레이어(발령 시도 반투명 원). 경보=시도/예보권역 단위 확인 후 시도 강조로 확정. 요약 순수함수 테스트 5건 포함 25건 통과. 실 API 현재 활성경보 0건이라 육안 확인은 경보 발생 시/Mock에서 대기 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -489,3 +490,30 @@ IDW로 보간해 지도에 색상 농도 면으로 표시하는 기능.
   `frontend/src/config/{grades,publicGrades,sido}.test.ts`,
   `frontend/src/components/AlertBanner.test.tsx`
 - 수정: `frontend/package.json`(스크립트·devDependencies), `frontend/tsconfig.app.json`(테스트 제외)
+
+## Phase 15. 경보 발령 시도 강조(3순위 2번) — COMPLETED (2026-07-21)
+
+3순위 2번. 착수 전 **경보 데이터의 실제 단위를 확인**한 결과, AirKorea 경보는 시군구가 아니라
+`districtName`(시도)와 `moveName`(예보권역, 예: 경기남부권역) 단위로만 온다는 사실을 발견했다.
+따라서 "시군구 정밀 폴리곤"은 경보 데이터와 직접 매칭되지 않아(권역→시군구 매핑 근거 데이터가
+별도 필요, 임의 생성 금지), 사용자와 재협의해 **데이터 단위에 정확히 일치하는 시도 단위 강조**로
+확정했다(외부 데이터 불필요, 즉시 검증 가능).
+
+- [x] 순수 함수 `utils/alerts.ts` `summarizeAlertsByDistrict`: 활성 경보를 시도별로 묶어
+      최고 발령단계(경보>주의보)·발령항목(중복제거)·건수 요약, 심각도 내림차순 정렬
+- [x] 지도 "경보 권역" 레이어(`alertRegion`): 발령 시도 중심(`SIDO_CENTERS`)에 반투명 원
+      (경보 빨강/주의보 주황) + 라벨 + InfoBox. `loadAlerts`가 `/air-quality/alerts/active`
+      조회 후 렌더(실패해도 타 레이어 무영향). 레이어 토글 기본 켜짐
+- [x] 테스트: `utils/alerts.test.ts` 5건(그룹핑·최고단계·정렬·비활성/무districtName 제외·항목중복)
+      포함 프론트 **25건 통과**, `npm run build`·oxlint 무영향
+- [x] 실 API 데이터 경로 확인(2026-07-21): `/air-quality/alerts/active` 200,
+      `districtName` 값이 `SIDO_CENTERS` 시도명과 일치하는 형식(fixture·스펙 동일 단문명).
+      단, **조회 시점 활성 경보 0건**(맑은 날)이라 강조 원 육안 렌더는 경보 발생 시 또는
+      Mock 모드에서 확인 대기(다른 지도 시각 기능과 동일한 육안 확인 대기 상태)
+
+### 변경 파일
+
+- 신규: `frontend/src/utils/alerts.ts`, `frontend/src/utils/alerts.test.ts`
+- 수정: `frontend/src/config/mapConfig.ts`(alertRegion 색·설정),
+  `frontend/src/pages/MapPage.tsx`(alertRegion 레이어·`addAlertRegion`·`loadAlerts`),
+  `docs/user-guide.html`(§7 레이어 설명·v1.5)

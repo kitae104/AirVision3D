@@ -3,12 +3,14 @@ import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import type {
-  ApiResponse, CurrentAirQuality, IdwGridResponse, InterpolationResult, PageResponse,
+  AirAlert, ApiResponse, CurrentAirQuality, IdwGridResponse, InterpolationResult, PageResponse,
   PollutantValue, PublicStationAir, Site, WeatherNow,
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { MAP_CONFIG } from '../config/mapConfig'
 import { SIDO_CENTERS, SIDO_VIEW_HEIGHT } from '../config/sido'
+import { summarizeAlertsByDistrict } from '../utils/alerts'
+import type { DistrictAlertSummary } from '../utils/alerts'
 import {
   PUBLIC_GRADE_COLORS, PUBLIC_POLLUTANTS, VALUE_STATUS_LABELS,
   displayHeightM, publicGradeOf,
@@ -44,7 +46,8 @@ interface PublicSeriesStation {
   samples: { measuredAt: string; pm25: number; pm25Grade: string | null }[]
 }
 
-type LayerKey = 'observation' | 'prediction' | 'interpolation' | 'airkorea' | 'idwSurface'
+type LayerKey =
+  | 'observation' | 'prediction' | 'interpolation' | 'airkorea' | 'idwSurface' | 'alertRegion'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
   observation: '관측값',
@@ -52,6 +55,7 @@ const LAYER_LABELS: Record<LayerKey, string> = {
   interpolation: 'IDW 보간값',
   airkorea: '공공 대기질',
   idwSurface: '실측 IDW 표면',
+  alertRegion: '경보 권역',
 }
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
@@ -345,6 +349,59 @@ function addIdwSurface(ds: Cesium.CustomDataSource, grid: IdwGridResponse) {
   }
 }
 
+const ALERT_ITEM_LABELS: Record<string, string> = {
+  PM10: '미세먼지', PM25: '초미세먼지', O3: '오존',
+}
+
+/**
+ * 경보 발령 시도 강조: 시도 중심에 반투명 원 + 라벨.
+ * 경보 데이터는 시군구가 아닌 시도(districtName) 단위이므로 시도 대표좌표로 강조한다.
+ */
+function addAlertRegion(ds: Cesium.CustomDataSource, summary: DistrictAlertSummary) {
+  const center = SIDO_CENTERS.find((c) => c.name === summary.district)
+  if (!center) return
+  const cfg = MAP_CONFIG.alertRegion
+  const css = summary.maxLevel === '경보' ? cfg.warningColor : cfg.watchColor
+  const color = Cesium.Color.fromCssColorString(css)
+  const items = summary.items.map((c) => ALERT_ITEM_LABELS[c] ?? c).join('·')
+  const text = `⚠ ${summary.district} ${items} ${summary.maxLevel} 발령`
+  const description = `
+    <table class="cesium-infoBox-defaultTable"><tbody>
+      <tr><th>구분</th><td>대기오염 경보 (AirKorea)</td></tr>
+      <tr><th>시도</th><td>${summary.district}</td></tr>
+      <tr><th>발령 단계</th><td>${summary.maxLevel}</td></tr>
+      <tr><th>항목</th><td>${items || '-'}</td></tr>
+      <tr><th>활성 경보 수</th><td>${summary.count}건</td></tr>
+      <tr><th>출처</th><td>환경부·한국환경공단 AirKorea (경보는 시도/예보권역 단위)</td></tr>
+    </tbody></table>`
+  ds.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(center.longitude, center.latitude, cfg.altitudeM),
+    ellipse: {
+      semiMajorAxis: cfg.radiusM,
+      semiMinorAxis: cfg.radiusM,
+      height: cfg.altitudeM,
+      material: color.withAlpha(cfg.alpha),
+      outline: true,
+      outlineColor: color.withAlpha(0.85),
+      outlineWidth: 2,
+    },
+    label: {
+      text,
+      font: 'bold 14px sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.fromCssColorString('#7f1d1d'),
+      outlineWidth: 4,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      pixelOffset: new Cesium.Cartesian2(0, -8),
+      showBackground: true,
+      backgroundColor: color.withAlpha(0.85),
+    },
+    name: `${summary.district} 경보 권역`,
+    description,
+  })
+}
+
 /**
  * 공공 측정소 1곳의 누적 시계열을 색이 변하는 원기둥 + 라벨로 표시.
  * 농도는 색(등급)으로 표현하며, 데이터 없는 시간은 availability로 숨긴다.
@@ -455,6 +512,7 @@ export default function MapPage() {
     interpolation: true,
     airkorea: true,
     idwSurface: false,
+    alertRegion: true,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
   const [from, setFrom] = useState('')
@@ -493,6 +551,21 @@ export default function MapPage() {
     } catch (err) {
       setPublicAir(null)
       setPublicError(errorMessage(err))
+    }
+  }
+
+  /** 활성 대기오염 경보 로드 → 발령 시도 강조 (실패해도 다른 레이어 무영향) */
+  const loadAlerts = async () => {
+    const ds = dataSourcesRef.current
+    if (!ds) return
+    try {
+      const res = await apiClient.get<ApiResponse<AirAlert[]>>('/air-quality/alerts/active')
+      ds.alertRegion.entities.removeAll()
+      for (const summary of summarizeAlertsByDistrict(res.data.data)) {
+        addAlertRegion(ds.alertRegion, summary)
+      }
+    } catch {
+      ds.alertRegion?.entities.removeAll()
     }
   }
 
@@ -680,6 +753,7 @@ export default function MapPage() {
       interpolation: new Cesium.CustomDataSource('interpolation'),
       airkorea: new Cesium.CustomDataSource('airkorea'),
       idwSurface: new Cesium.CustomDataSource('idwSurface'),
+      alertRegion: new Cesium.CustomDataSource('alertRegion'),
     }
     Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
@@ -709,6 +783,7 @@ export default function MapPage() {
       })
     loadCurrent()
     loadPublicAir()
+    loadAlerts()
 
     return () => {
       viewer.destroy()
