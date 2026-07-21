@@ -26,6 +26,7 @@
 | 14 | 프론트엔드 컴포넌트 테스트 도입(3순위 1번) | VERIFIED | Vitest+RTL 도입, config 순수함수·AlertBanner 렌더 테스트 20건 통과(2026-07-21). 빌드·oxlint 무영향 |
 | 15 | 경보 발령 시도 강조(3순위 2번) | COMPLETED | 지도 "경보 권역" 레이어(발령 시도 반투명 원). 경보=시도/예보권역 단위 확인 후 시도 강조로 확정. 요약 순수함수 테스트 5건 포함 25건 통과. 실 API 현재 활성경보 0건이라 육안 확인은 경보 발생 시/Mock에서 대기 |
 | 16 | 브라우저 육안 확인 + 지도 결함 2건 수정(3순위 3번) | VERIFIED | Playwright로 전 화면 육안 확인(2026-07-22), Phase 6·7·8·13 VERIFIED 승격. StrictMode 비동기 경합("요청 처리 중 오류")·OSM z>19 CORS 오류 수정 |
+| 17 | 지도 초기 뷰 인천 중심 + 전체화면 수정 | VERIFIED | 초기 카메라를 기본 시도(인천) 중심으로, 전체화면 대상을 body→지도 컨테이너로 수정. Playwright 실검증(2026-07-22): fullscreenElement=지도, 1536x720 전체 확대·ESC 복귀 확인 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -562,3 +563,25 @@ Chrome 확장 연결이 안 되어 **Playwright**(플러그인)로 실 스택에
 
 - `frontend/src/pages/MapPage.tsx`(stale 가드 2곳·catch 로깅 2곳·OSM maximumLevel),
   `docs/progress.md`(본 절·Phase 6/7/8/13 승격)
+
+## Phase 17. 지도 초기 뷰 인천 중심 + 전체화면 수정 — VERIFIED (2026-07-22)
+
+사용자 요청 2건: ① 3D 지도 최초 표시를 인천 중심으로, ② 전체화면 버튼을 눌러도
+지도 크기가 변하지 않는 문제.
+
+- [x] **초기 카메라**: `mapConfig.ts` `initialView`를 수도권 광역(126.98, 37.2)에서
+      기본 시도인 인천 중심(126.7052, 37.4563 — `config/sido.ts` 인천 좌표와 동일)으로 변경
+- [x] **전체화면 원인·수정**: Cesium `fullscreenButton`은 `fullscreenElement` 미지정 시
+      `document.body`(페이지 전체)를 전체화면 대상으로 삼음 — 브라우저가 이미 최대화면
+      화면 변화가 없어 보이는 것이 원인. Viewer 옵션에
+      `fullscreenElement: containerRef.current`(지도 컨테이너)를 지정해 지도만 확대되도록 수정
+- [x] **Playwright 실검증**: 초기 로드 시 인천 측정소 밀집 지역이 화면 중앙 확인.
+      전체화면 클릭 → `document.fullscreenElement === 지도 컨테이너`, 컨테이너 1536x720
+      (= 화면 크기, 기존 1264x419) 확인, 사이드바 없이 지도만 표시. `exitFullscreen` 후
+      1264x419 레이아웃 크기 복귀 확인
+- [x] 프론트 테스트 25/25·빌드·oxlint 통과
+
+### 변경 파일
+
+- `frontend/src/config/mapConfig.ts`(initialView), `frontend/src/pages/MapPage.tsx`
+  (fullscreenElement), `docs/user-guide.html`(§7 전체화면·초기 화면 안내, v1.6)
