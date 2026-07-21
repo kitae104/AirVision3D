@@ -23,6 +23,7 @@
 | 11 | 공공 데이터 시계열 축적 루프 | VERIFIED | 실 DB 실기동 검증(2026-07-18). 트랜잭션 버그 발견·수정, 수집 208건/재수집 멱등 확인, integration-test 33건 중 32 PASS(신규 4건 전부 PASS) |
 | 12 | 실측 IDW 격자 표면(2순위 첫 기능) | VERIFIED | 백엔드 테스트 126건, 실기동 검증(2026-07-19): 인천 cells=100·sourceCount=41·mock=false, 서울 sourceCount=38, resolution=25→400 확인 |
 | 13 | 시도 선택 UI + 공공 측정소 시계열 재생(2순위 나머지) | COMPLETED | 백엔드 테스트 128건, 신규 시계열 엔드포인트 실 DB 검증(2026-07-21): 인천 42측정소·5프레임·좌표포함, 서울 40곳 전환. 프론트 빌드 통과. 브라우저 육안 확인 대기 |
+| 14 | 프론트엔드 컴포넌트 테스트 도입(3순위 1번) | VERIFIED | Vitest+RTL 도입, config 순수함수·AlertBanner 렌더 테스트 20건 통과(2026-07-21). 빌드·oxlint 무영향 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -461,3 +462,30 @@ IDW로 보간해 지도에 색상 농도 면으로 표시하는 기능.
 - 브라우저 육안 확인 대기(다른 지도 기능과 동일): `/map`에서 시도 전환·시계열 재생 시각 확인
 - 시계열 재생 프레임 수는 누적량에 비례 — 현재 3일간 5프레임(스택이 매시간 켜져 있지 않아
   sporadic 수집). 매시간 수집이 지속되면 프레임이 촘촘해진다(코드 결함 아님)
+
+## Phase 14. 프론트엔드 컴포넌트 테스트 도입(3순위 1번) — VERIFIED (2026-07-21)
+
+3순위(품질·운영 보강)의 1번 항목. 백엔드만 검증되던 상태(프론트 테스트 0건)에서 Vitest+RTL을
+도입해 순수 함수와 대표 컴포넌트 렌더링을 자동 검증한다.
+
+- [x] 개발 의존성: `vitest`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`,
+      `@testing-library/dom` 추가. 스크립트 `test`(vitest run)·`test:watch` 추가
+- [x] `vitest.config.ts`(별도 설정, jsdom 환경, Cesium 정적복사 플러그인 제외, React JSX 자동주입),
+      `src/test/setup.ts`(jest-dom 매처 등록 + afterEach cleanup)
+- [x] `tsconfig.app.json`에서 테스트 파일 제외(빌드 `tsc -b`는 테스트를 타입검사하지 않고,
+      테스트는 Vitest/esbuild가 처리 — 빌드와 테스트 관심사 분리)
+- [x] 테스트 20건: `config/grades`(등급 경계·정렬 7), `config/publicGrades`(오염물질 등급 구간·
+      높이 정규화 클램프·색상 7), `config/sido`(AirKorea 17시도 일치·중복없음·좌표범위 4),
+      `components/AlertBanner`(경보 렌더·빈 경보 시 미표시 2, apiClient 목)
+- [x] 검증: `npm run test` → **20/20 통과**, `npm run build` 무영향(테스트 제외 확인),
+      `npm run lint`(oxlint) 무경고
+- 참고: AlertBanner의 조회 실패(catch) 경로 테스트는 Vitest의 미처리 거부 추적과 충돌해 제외
+      (렌더 로직 2건으로 핵심 동작은 커버). Cesium 의존 컴포넌트(MapPage)는 jsdom에서
+      테스트 비용이 커 순수 함수·경량 컴포넌트 우선
+
+### 변경 파일
+
+- 신규: `frontend/vitest.config.ts`, `frontend/src/test/setup.ts`,
+  `frontend/src/config/{grades,publicGrades,sido}.test.ts`,
+  `frontend/src/components/AlertBanner.test.tsx`
+- 수정: `frontend/package.json`(스크립트·devDependencies), `frontend/tsconfig.app.json`(테스트 제외)

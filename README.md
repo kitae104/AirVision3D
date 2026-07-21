@@ -143,6 +143,8 @@ cd backend && ./gradlew test
 # AI Service
 cd ai-service && .venv\Scripts\python -m pytest
 
+# Frontend (단위 테스트: Vitest + React Testing Library)
+cd frontend && npm run test
 # Frontend (빌드 + 타입 검사)
 cd frontend && npm run build
 ```
