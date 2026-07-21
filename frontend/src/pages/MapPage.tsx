@@ -560,12 +560,13 @@ export default function MapPage() {
     if (!ds) return
     try {
       const res = await apiClient.get<ApiResponse<AirAlert[]>>('/air-quality/alerts/active')
+      if (dataSourcesRef.current !== ds) return // 응답 대기 중 재마운트 시 중단
       ds.alertRegion.entities.removeAll()
       for (const summary of summarizeAlertsByDistrict(res.data.data)) {
         addAlertRegion(ds.alertRegion, summary)
       }
     } catch {
-      ds.alertRegion?.entities.removeAll()
+      ds.alertRegion.entities.removeAll()
     }
   }
 
@@ -577,10 +578,11 @@ export default function MapPage() {
       const q = sido ? `?sido=${encodeURIComponent(sido)}` : ''
       const res = await apiClient.get<ApiResponse<IdwGridResponse>>(
         `/air-quality/interpolation/grid${q}`)
+      if (dataSourcesRef.current !== ds) return // 응답 대기 중 재마운트 시 중단
       ds.idwSurface.entities.removeAll()
       addIdwSurface(ds.idwSurface, res.data.data)
     } catch {
-      ds.idwSurface?.entities.removeAll()
+      ds.idwSurface.entities.removeAll()
     }
   }
 

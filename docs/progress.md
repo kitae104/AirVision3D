@@ -24,9 +24,10 @@
 | 12 | 실측 IDW 격자 표면(2순위 첫 기능) | VERIFIED | 백엔드 테스트 126건, 실기동 검증(2026-07-19): 인천 cells=100·sourceCount=41·mock=false, 서울 sourceCount=38, resolution=25→400 확인 |
 | 13 | 시도 선택 UI + 공공 측정소 시계열 재생(2순위 나머지) | VERIFIED | 실 DB 검증(2026-07-21) + 브라우저 육안 확인(2026-07-22): 시도 전환 시 측정소·기상·IDW 표면 갱신·카메라 이동, 시계열→현재 복귀 시 공공 레이어 복원 확인 |
 | 14 | 프론트엔드 컴포넌트 테스트 도입(3순위 1번) | VERIFIED | Vitest+RTL 도입, config 순수함수·AlertBanner 렌더 테스트 20건 통과(2026-07-21). 빌드·oxlint 무영향 |
-| 15 | 경보 발령 시도 강조(3순위 2번) | COMPLETED | 지도 "경보 권역" 레이어(발령 시도 반투명 원). 경보=시도/예보권역 단위 확인 후 시도 강조로 확정. 요약 순수함수 테스트 5건 포함 25건 통과. 실 API 현재 활성경보 0건이라 육안 확인은 경보 발생 시/Mock에서 대기 |
+| 15 | 경보 발령 시도 강조(3순위 2번) | VERIFIED | 강제 Mock 모드 육안 검증(2026-07-22): 인천 중심 주황 주의보 원+라벨, AlertBanner 동시 표시 확인 (Phase 18) |
 | 16 | 브라우저 육안 확인 + 지도 결함 2건 수정(3순위 3번) | VERIFIED | Playwright로 전 화면 육안 확인(2026-07-22), Phase 6·7·8·13 VERIFIED 승격. StrictMode 비동기 경합("요청 처리 중 오류")·OSM z>19 CORS 오류 수정 |
 | 17 | 지도 초기 뷰 인천 중심 + 전체화면 수정 | VERIFIED | 초기 카메라를 기본 시도(인천) 중심으로, 전체화면 대상을 body→지도 컨테이너로 수정. Playwright 실검증(2026-07-22): fullscreenElement=지도, 1536x720 전체 확대·ESC 복귀 확인 |
+| 18 | 잔여 검증 일괄 처리(경보 Mock 검증·샘플 리시드·Minor 폴리시) | VERIFIED | 강제 Mock으로 경보 권역 육안 검증(Phase 15 승격), 리시드 511건→시간별 차트 24포인트 복구, IDW 경계값 테스트 2건(백엔드 130), stale 가드 일관화(2026-07-22) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -585,3 +586,37 @@ Chrome 확장 연결이 안 되어 **Playwright**(플러그인)로 실 스택에
 
 - `frontend/src/config/mapConfig.ts`(initialView), `frontend/src/pages/MapPage.tsx`
   (fullscreenElement), `docs/user-guide.html`(§7 전체화면·초기 화면 안내, v1.6)
+
+## Phase 18. 잔여 검증 일괄 처리 — VERIFIED (2026-07-22)
+
+앞선 Phase들에서 "대기"로 남겨둔 잔여 항목 3건을 일괄 처리했다.
+
+### ① 경보 권역 육안 검증 (Phase 15 → VERIFIED 승격)
+
+- 실 API 활성 경보가 0건이라 `.env` 수정 없이 **커맨드라인 인자로 강제 Mock 모드** 기동:
+  `bootRun --args='--airvision.public-data.mock-enabled=true ...'`
+  (수집기 2개 플래그도 꺼서 Mock 데이터가 실측 누적 테이블에 저장되는 것을 방지)
+- Playwright 육안 확인: 인천 중심 **주황(주의보) 반투명 원 + "⚠ 인천 초미세먼지 주의보 발령"
+  라벨** 렌더, 상단 AlertBanner(발령 농도 82㎍/㎥) 동시 표시, "Mock 데이터" 배지 확인
+- Mock 예보 카드(오늘 보통/내일 나쁨/모레 보통) 렌더도 확인 — 실키 모드의 예보
+  "데이터 없습니다"가 자정 직후 미발표 시간대 특성임을 뒷받침
+
+### ② 샘플 리시드 실행 (대시보드 시간별 차트 복구)
+
+- 같은 기동에 `--airvision.sample.reseed=true` 포함 → **511개 시간대 보충** 로그 확인
+- `GET /api/dashboard/hourly?hours=24` 0→**24포인트**, 대시보드 차트 라인 육안 확인
+- 시계열 재생 기본 기간도 현재 시각 기준(7/21~7/22)으로 자동 갱신됨
+- 정상(실키) 모드 재기동 후에도 24포인트 유지 확인(mock=false·측정소 43곳 복귀)
+
+### ③ IDW 최종리뷰 Minor 폴리시 잔여 정리
+
+- `PublicIdwServiceTest`에 경계값 테스트 2건 추가: power 0.1/10·resolution 2/20 허용,
+  단일 소스(span=0) 시 bbox 최소 여백(±0.05) 확장 — 백엔드 테스트 **130건** 통과
+- `MapPage.tsx`: catch의 불필요 optional chain 2곳 제거(리뷰 #6),
+  `loadIdwSurface`/`loadAlerts`에도 응답 후 stale 가드 추가(Phase 16 수정과 일관화)
+- 프론트 테스트 25건·빌드·oxlint 통과
+
+### 변경 파일
+
+- `backend/src/test/.../PublicIdwServiceTest.java`(테스트 2건),
+  `frontend/src/pages/MapPage.tsx`(optional chain 정리·stale 가드), `docs/progress.md`(본 절)
