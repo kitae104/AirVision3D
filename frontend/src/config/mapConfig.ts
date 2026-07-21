@@ -31,6 +31,20 @@ export const MAP_CONFIG = {
     interpolation: '#8b5cf6',
     airkorea: '#0ea5e9',
     idwSurface: '#14b8a6',
+    alertRegion: '#dc2626',
+  },
+
+  /** 경보 발령 시도 강조 (반투명 원) */
+  alertRegion: {
+    /** 강조 원 반지름 (m) — 시도를 대략 덮는 크기 */
+    radiusM: 45_000,
+    /** 표시 고도 (m) */
+    altitudeM: 2_000,
+    /** 경보(더 심각) 색 / 주의보 색 */
+    warningColor: '#dc2626',
+    watchColor: '#f97316',
+    /** 채움 투명도 */
+    alpha: 0.22,
   },
 
   /** 공공(AirKorea) 측정소 농도 막대 (원기둥) */
