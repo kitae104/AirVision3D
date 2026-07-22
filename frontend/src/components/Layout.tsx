@@ -5,6 +5,7 @@ import AlertBanner from './AlertBanner'
 const NAV_ITEMS = [
   { to: '/', label: '대시보드', adminOnly: false },
   { to: '/map', label: '3D 지도', adminOnly: false },
+  { to: '/dual-map', label: '듀얼맵 비교', adminOnly: false },
   { to: '/observations', label: '관측 데이터', adminOnly: false },
   { to: '/public-air', label: '공공 대기질', adminOnly: false },
   { to: '/data-entry', label: '데이터 등록', adminOnly: true },

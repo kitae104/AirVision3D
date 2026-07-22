@@ -21,6 +21,9 @@ export default defineConfig({
   define: {
     CESIUM_BASE_URL: JSON.stringify('/cesium'),
   },
+  // 루트 .env 하나로 통합 관리 (VITE_ 접두사 변수만 클라이언트에 노출되므로
+  // DB 비밀번호 등 비접두사 변수는 번들에 포함되지 않는다)
+  envDir: '..',
   server: {
     port: 5173,
     // 다른 기기에서 접근 허용

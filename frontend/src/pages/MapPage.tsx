@@ -507,7 +507,11 @@ function toLocalInput(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`
 }
 
-export default function MapPage() {
+/**
+ * 3D 지도 화면. initialDual이 true면 듀얼맵(관측 vs 예측·보간 비교)이 켜진 상태로
+ * 시작한다 — /dual-map 전용 페이지에서 사용.
+ */
+export default function MapPage({ initialDual = false }: { initialDual?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const dataSourcesRef = useRef<Record<LayerKey, Cesium.CustomDataSource> | null>(null)
@@ -527,7 +531,7 @@ export default function MapPage() {
     alertRegion: true,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
-  const [dualMode, setDualMode] = useState(false)
+  const [dualMode, setDualMode] = useState(initialDual)
   /** 시계열 재로드 시 증가 — 듀얼맵 비교 뷰가 새 기간을 다시 그리도록 하는 신호 */
   const [seriesKey, setSeriesKey] = useState(0)
   const [measuring, setMeasuring] = useState(false)

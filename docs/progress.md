@@ -32,6 +32,7 @@
 | 20 | 최종보고서 격차 기능 4종(Modified IDW·태양고도·듀얼맵·뷰어 유틸) | VERIFIED | Python 교차검증(1e-6)·백엔드(신규 11건)·AI 73건·프론트 34건 통과. 실 DB·실 AirKorea·Playwright 실검증(2026-07-22) |
 | 21 | 듀얼맵 시계열 이력 재생(Phase 20 제약 해소) | VERIFIED | 우측 비교 뷰가 기간 내 예측·보간 이력을 좌측 시계와 동기 재생. 프론트 38건 통과, Playwright 실검증(2026-07-22) |
 | 22 | 거리 측정 중 InfoBox 억제(Phase 20 제약 해소) | VERIFIED | 측정 중 뷰어 기본 클릭(엔티티 선택·더블클릭 추적) 제거→종료 시 복원. Playwright로 억제·복원 실검증(2026-07-22) |
+| 23 | ion 토큰 env 적용 수정 + 듀얼맵 비교 전용 페이지 | VERIFIED | vite envDir 루트 지정으로 루트 .env 토큰 실적용, 위성 시작·[위성/일반] 전환 실검증. /dual-map 메뉴 신설(두 지도 상태로 시작). 프론트 38건 통과(2026-07-22) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -762,7 +763,7 @@ Phase 19에서 식별한 보고서 대비 격차 4건을 우선순위 순서로 
 
 - ~~듀얼맵 우측 뷰어는 현재값(최신 예측·보간)만 표시한다~~ → **해결(Phase 21)**: 시계열 이력 재생 지원
 - ~~거리 측정 중에도 엔티티 클릭 시 InfoBox가 열릴 수 있다~~ → **해결(Phase 22)**: 측정 중 기본 클릭 억제
-- 위성 배경 전환은 Cesium ion 토큰이 있어야 노출된다(현재 개발 환경 미설정으로 미육안검증)
+- ~~위성 배경 전환은 ion 토큰 미설정으로 미육안검증~~ → **검증 완료(Phase 23)**: 토큰 설정 후 실확인
 - `resnet18_solar_v1` 지표는 합성 120장·3 epochs 결과로 파이프라인 검증용이다(성능 인용 금지)
 
 ## Phase 21. 듀얼맵 시계열 이력 재생 — VERIFIED (2026-07-22)
@@ -820,3 +821,37 @@ Phase 20의 알려진 제약 "거리 측정 중에도 엔티티 클릭 시 InfoB
 
 - `frontend/src/pages/MapPage.tsx`(측정 effect: 기본 클릭 제거·복원),
   `docs/user-guide.html`(§7·이력 v1.11), `docs/progress.md`(본 절)
+
+## Phase 23. ion 토큰 env 적용 수정 + 듀얼맵 비교 전용 페이지 — VERIFIED (2026-07-22)
+
+사용자 요청 2건: ① Cesium ion 토큰 설정 확인·위성/일반 전환 검증, ② 두 지도가 항상
+나타나는 전용 화면 추가.
+
+### ① ion 토큰 env 불일치 수정 (잠복 설정 결함)
+
+- **발견**: 안내 문서는 "루트 `.env`의 `VITE_CESIUM_ION_TOKEN`"이라고 되어 있으나,
+  Vite는 기본적으로 앱 루트(`frontend/`)의 env 파일만 읽어 루트 `.env`의 토큰이
+  실제로는 프론트에 전달되지 않았다(토큰 없이 OSM 폴백만 써 와서 미발견).
+- **수정**: `frontend/vite.config.ts`에 `envDir: '..'` 지정 → 루트 `.env` 하나로 통합.
+  `VITE_` 접두사 변수만 클라이언트에 노출되므로 DB 비밀번호 등 비접두사 변수는
+  번들에 포함되지 않는다(안전).
+- **실검증**(사용자 토큰 설정 후): 지도 최초 로드 시 위성영상(Bing Aerial via ion) 시작,
+  [일반 지도] 클릭 → OSM 전환, [위성 지도] 클릭 → 위성 복귀 육안 확인. 콘솔 에러 0건
+
+### ② 듀얼맵 비교 전용 페이지 (/dual-map)
+
+- `MapPage`에 `initialDual` prop 추가(기본 false — 기존 /map 동작 무변경),
+  `/dual-map` 라우트 신설(`<MapPage key="dual-map" initialDual />`, key로 /map과 상태 분리),
+  사이드바에 "듀얼맵 비교" 메뉴 추가. 기존 듀얼맵 토글·시계열 재생 기능 전부 동일
+- 실검증: 메뉴 클릭 → 두 지도(캔버스 2개+비교 뷰)가 켜진 상태로 즉시 시작,
+  듀얼맵 버튼 활성 표시, 위성 배경 동시 적용 확인
+
+### 테스트·검증
+
+- tsc·oxlint·Vitest 38건 통과. Playwright 실검증(위 ①·② 전부), 콘솔 에러 0건
+
+### 변경 파일
+
+- `frontend/vite.config.ts`(envDir), `frontend/src/App.tsx`(/dual-map 라우트),
+  `frontend/src/components/Layout.tsx`(메뉴), `frontend/src/pages/MapPage.tsx`(initialDual),
+  `docs/user-guide.html`(§7 배경지도·듀얼맵 비교 메뉴·이력 v1.12), `docs/progress.md`(본 절)
