@@ -31,3 +31,20 @@ export const SIDO_CENTERS: SidoCenter[] = [
 
 /** 시도 선택 시 카메라 높이(m). 시도 전역이 보이도록 광역 수준으로 잡는다. */
 export const SIDO_VIEW_HEIGHT = 220_000
+
+/**
+ * 프로젝트 핵심 대상지: 인천 미추홀구·남동구·연수구.
+ * 최종보고서의 "사업대상지 지도 이동" 기능에 대응하며, 데이터가 가장 확실한
+ * 인천 도심권(AirKorea 실측 밀집 지역)을 초기 화면과 빠른 이동 대상으로 삼는다.
+ */
+export const INCHEON_CORE_DISTRICTS: SidoCenter[] = [
+  { name: '미추홀구', latitude: 37.46, longitude: 126.665 },
+  { name: '남동구', latitude: 37.435, longitude: 126.72 },
+  { name: '연수구', latitude: 37.405, longitude: 126.67 },
+]
+
+/** 구 단위 이동 시 카메라 높이(m) */
+export const DISTRICT_VIEW_HEIGHT = 12_000
+
+/** 핵심 3구가 한눈에 보이는 초기/인천 선택 시 조망 (3구 중심 상공) */
+export const INCHEON_FOCUS_VIEW = { longitude: 126.69, latitude: 37.433, height: 40_000 }

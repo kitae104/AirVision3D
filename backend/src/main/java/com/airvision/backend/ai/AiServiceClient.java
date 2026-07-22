@@ -54,6 +54,16 @@ public class AiServiceClient {
     /** 이미지 + 환경값으로 PM2.5 추론을 요청한다. */
     public PredictData predict(String modelName, MultipartFile image,
                                double temperature, double humidity, double windSpeed) {
+        return predict(modelName, image, temperature, humidity, windSpeed, null, null, null);
+    }
+
+    /**
+     * 이미지 + 환경값 + 위치/시각으로 PM2.5 추론을 요청한다.
+     * 위경도·시각은 태양고도 특징을 사용하는 모델에서 필요하며, 미사용 모델은 무시한다.
+     */
+    public PredictData predict(String modelName, MultipartFile image,
+                               double temperature, double humidity, double windSpeed,
+                               Double latitude, Double longitude, java.time.Instant capturedAt) {
         // reactive-streams 의존성 필요 (build.gradle 참고)
         org.springframework.http.client.MultipartBodyBuilder builder =
                 new org.springframework.http.client.MultipartBodyBuilder();
@@ -61,6 +71,13 @@ public class AiServiceClient {
         builder.part("temperature", String.valueOf(temperature));
         builder.part("humidity", String.valueOf(humidity));
         builder.part("wind_speed", String.valueOf(windSpeed));
+        if (latitude != null && longitude != null) {
+            builder.part("latitude", String.valueOf(latitude));
+            builder.part("longitude", String.valueOf(longitude));
+        }
+        if (capturedAt != null) {
+            builder.part("captured_at", capturedAt.toString());
+        }
 
         try {
             Envelope<PredictData> response = restClient.post()

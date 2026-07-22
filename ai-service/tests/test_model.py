@@ -55,6 +55,43 @@ class TestTrainSmoke:
         assert "val_mae" in summary["history"][0]
 
 
+@pytest.fixture(scope="session")
+def trained_solar_model(small_dataset, tmp_path_factory):
+    """태양고도 특징 포함 1 epoch smoke 학습 (env 4차원)."""
+    dataset_dir, _ = small_dataset
+    models_dir = tmp_path_factory.mktemp("models_solar")
+    summary = train_model(
+        dataset_dir=dataset_dir, models_dir=models_dir,
+        model_name="smoke_solar_model", epochs=1, batch_size=4,
+        image_size=64, pretrained=False, use_solar_altitude=True, seed=0)
+    return models_dir, summary
+
+
+class TestSolarModel:
+
+    def test_config_records_solar_feature(self, trained_solar_model):
+        _, summary = trained_solar_model
+        assert summary["config"]["use_solar_altitude"] is True
+        assert summary["config"]["env_columns"][-1] == "solar_altitude"
+
+    def test_predict_with_location(self, trained_solar_model):
+        models_dir, _ = trained_solar_model
+        predictor = Predictor.load(models_dir / "smoke_solar_model")
+        assert predictor.uses_solar_altitude is True
+        image = Image.new("RGB", (320, 240), (150, 160, 170))
+        result = predictor.predict(image, temperature=24.0, humidity=60.0,
+                                   wind_speed=2.0, latitude=37.45, longitude=126.70)
+        assert result["pm25"] >= 0
+        assert result["grade"] in ["좋음", "보통", "나쁨", "매우나쁨"]
+
+    def test_predict_without_location_raises(self, trained_solar_model):
+        models_dir, _ = trained_solar_model
+        predictor = Predictor.load(models_dir / "smoke_solar_model")
+        image = Image.new("RGB", (320, 240), (150, 160, 170))
+        with pytest.raises(ValueError, match="latitude/longitude"):
+            predictor.predict(image, temperature=24.0, humidity=60.0, wind_speed=2.0)
+
+
 class TestPredictor:
 
     def test_predict_returns_pm25_and_grade(self, trained_model):

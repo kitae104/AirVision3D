@@ -4,13 +4,18 @@ import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import type {
   AirAlert, ApiResponse, CurrentAirQuality, IdwGridResponse, InterpolationResult, PageResponse,
-  PollutantValue, PublicStationAir, Site, WeatherNow,
+  PollutantValue, Prediction, PublicStationAir, Site, WeatherNow,
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { MAP_CONFIG } from '../config/mapConfig'
-import { SIDO_CENTERS, SIDO_VIEW_HEIGHT } from '../config/sido'
+import {
+  DISTRICT_VIEW_HEIGHT, INCHEON_CORE_DISTRICTS, INCHEON_FOCUS_VIEW,
+  SIDO_CENTERS, SIDO_VIEW_HEIGHT,
+} from '../config/sido'
 import { summarizeAlertsByDistrict } from '../utils/alerts'
 import type { DistrictAlertSummary } from '../utils/alerts'
+import { interpolationSeries, predictionSeries } from '../utils/compareSeries'
+import { pathDistanceKm } from '../utils/geo'
 import {
   PUBLIC_GRADE_COLORS, PUBLIC_POLLUTANTS, VALUE_STATUS_LABELS,
   displayHeightM, publicGradeOf,
@@ -155,7 +160,9 @@ function addMarker(ds: Cesium.CustomDataSource, lng: number, lat: number, name: 
  * 시계열 격자 추가: 샘플별 1시간 구간의 색상/라벨을 TimeIntervalCollectionProperty로 구성.
  * 데이터가 없는 시간은 entity availability로 숨긴다 (완료 조건: 데이터 없는 시간 처리).
  */
-function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite) {
+function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite,
+                           markerColor: string = MAP_CONFIG.markers.observation,
+                           seriesType: string = '관측값 시계열') {
   const colorProp = new Cesium.TimeIntervalCollectionProperty()
   const outlineProp = new Cesium.TimeIntervalCollectionProperty()
   const labelProp = new Cesium.TimeIntervalCollectionProperty()
@@ -182,7 +189,7 @@ function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite) {
     position: Cesium.Cartesian3.fromDegrees(site.longitude, site.latitude, 10),
     point: {
       pixelSize: 12,
-      color: Cesium.Color.fromCssColorString(MAP_CONFIG.markers.observation),
+      color: Cesium.Color.fromCssColorString(markerColor),
       outlineColor: Cesium.Color.WHITE,
       outlineWidth: 2,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
@@ -199,7 +206,7 @@ function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite) {
       showBackground: false,
     },
     name: site.siteName,
-    description: buildDescription('관측값 시계열', null, undefined, site.latitude, site.longitude),
+    description: buildDescription(seriesType, null, undefined, site.latitude, site.longitude),
   })
 
   // 시간에 따라 색이 변하는 격자
@@ -215,7 +222,7 @@ function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite) {
         outlineColor: outlineProp,
       },
       name: `${site.siteName} 미세먼지 격자`,
-      description: buildDescription('관측값 시계열', null, undefined, site.latitude, site.longitude),
+      description: buildDescription(seriesType, null, undefined, site.latitude, site.longitude),
     })
   }
 }
@@ -504,6 +511,11 @@ export default function MapPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const dataSourcesRef = useRef<Record<LayerKey, Cesium.CustomDataSource> | null>(null)
+  const compareContainerRef = useRef<HTMLDivElement>(null)
+  const measureDsRef = useRef<Cesium.CustomDataSource | null>(null)
+  const measurePointsRef = useRef<{ latitude: number; longitude: number }[]>([])
+  /** 듀얼맵 비교 뷰가 effect 재실행 없이 최신 관측소 목록을 읽기 위한 미러 */
+  const sitesRef = useRef<Site[]>([])
 
   const [sites, setSites] = useState<Site[]>([])
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
@@ -515,6 +527,12 @@ export default function MapPage() {
     alertRegion: true,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
+  const [dualMode, setDualMode] = useState(false)
+  /** 시계열 재로드 시 증가 — 듀얼맵 비교 뷰가 새 기간을 다시 그리도록 하는 신호 */
+  const [seriesKey, setSeriesKey] = useState(0)
+  const [measuring, setMeasuring] = useState(false)
+  const [baseMap, setBaseMap] = useState<'osm' | 'satellite'>(
+    (import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined) ? 'satellite' : 'osm')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -710,6 +728,7 @@ export default function MapPage() {
       viewer.clock.shouldAnimate = true
       viewer.timeline?.zoomTo(start, stop)
       setMode('series')
+      setSeriesKey((k) => k + 1) // 듀얼맵 비교 뷰가 새 기간 이력을 다시 그리도록 신호
       setLayers((prev) => ({
         ...prev,
         observation: obs.length > 0 ? true : prev.observation,
@@ -757,6 +776,8 @@ export default function MapPage() {
       // 미지정 시 document.body(페이지 전체)가 전체화면 대상이 되어
       // 지도 크기가 변하지 않는 것처럼 보임 → 지도 컨테이너를 대상으로 지정
       fullscreenElement: containerRef.current,
+      // 화면 캡처(canvas.toDataURL)를 위해 렌더 버퍼 유지
+      contextOptions: { webgl: { preserveDrawingBuffer: true } },
     })
     viewer.scene.globe.depthTestAgainstTerrain = false
     viewer.clock.shouldAnimate = false
@@ -772,6 +793,11 @@ export default function MapPage() {
     }
     Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
+
+    // 거리 측정 결과 전용 데이터소스 (레이어 토글과 무관)
+    const measureDs = new Cesium.CustomDataSource('measure')
+    viewer.dataSources.add(measureDs)
+    measureDsRef.current = measureDs
 
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(
@@ -804,6 +830,7 @@ export default function MapPage() {
       viewer.destroy()
       viewerRef.current = null
       dataSourcesRef.current = null
+      measureDsRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -816,6 +843,129 @@ export default function MapPage() {
       ds[key].show = layers[key]
     })
   }, [layers])
+
+  useEffect(() => {
+    sitesRef.current = sites
+  }, [sites])
+
+  // 듀얼맵(최종보고서 그림 3-73): 우측에 예측/보간 전용 비교 뷰어를 띄우고
+  // 좌측(관측) 카메라·시계에 동기화한다. 우측 뷰어의 직접 조작은 막는다(항상 좌측 추종).
+  // 현재값 모드는 최신 예측/보간을, 시계열 모드는 기간 내 예측/보간 이력을 재생한다.
+  useEffect(() => {
+    if (!dualMode) return
+    const main = viewerRef.current
+    const container = compareContainerRef.current
+    if (!main || !container) return
+
+    const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined
+    const compare = new Cesium.Viewer(container, {
+      baseLayer: ionToken
+        ? undefined
+        : Cesium.ImageryLayer.fromProviderAsync(
+            Promise.resolve(
+              new Cesium.OpenStreetMapImageryProvider({
+                url: 'https://tile.openstreetmap.org/',
+                maximumLevel: 19,
+              }))),
+      baseLayerPicker: false,
+      geocoder: false,
+      homeButton: false,
+      sceneModePicker: false,
+      navigationHelpButton: false,
+      animation: false,
+      timeline: false,
+      fullscreenButton: false,
+    })
+    compare.scene.globe.depthTestAgainstTerrain = false
+    compare.scene.screenSpaceCameraController.enableInputs = false
+    const compareDs = new Cesium.CustomDataSource('compare')
+    compare.dataSources.add(compareDs)
+
+    // 좌 → 우 카메라 동기화
+    const sync = () => {
+      if (compare.isDestroyed() || main.isDestroyed()) return
+      compare.camera.setView({
+        destination: main.camera.position,
+        orientation: {
+          heading: main.camera.heading,
+          pitch: main.camera.pitch,
+          roll: main.camera.roll,
+        },
+      })
+    }
+    const prevPercentageChanged = main.camera.percentageChanged
+    main.camera.percentageChanged = 0.001
+    main.camera.changed.addEventListener(sync)
+    // 뷰어 리사이즈(화면 분할)가 반영된 뒤 첫 동기화
+    requestAnimationFrame(sync)
+
+    // 좌 → 우 시계 동기화 (시계열 재생 시 우측의 시간 동적 엔티티가 같은 시각을 표시)
+    const clockSync = () => {
+      if (compare.isDestroyed() || main.isDestroyed()) return
+      compare.clock.currentTime = main.clock.currentTime
+    }
+    main.clock.onTick.addEventListener(clockSync)
+
+    // 비교 데이터 로드: 현재값 모드 = 최신 예측/보간, 시계열 모드 = 기간 내 이력 재생
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (mode === 'series' && from && to) {
+          const fromIso = new Date(from).toISOString()
+          const toIso = new Date(to).toISOString()
+          const [predRes, idwRes] = await Promise.all([
+            apiClient.get<ApiResponse<PageResponse<Prediction>>>('/predictions?size=200'),
+            apiClient.get<ApiResponse<PageResponse<InterpolationResult>>>('/interpolations?size=200'),
+          ])
+          if (cancelled || compare.isDestroyed()) return
+          for (const s of predictionSeries(
+              predRes.data.data.content, sitesRef.current, fromIso, toIso)) {
+            addTimeSeriesSite(compareDs, s, MAP_CONFIG.markers.prediction, 'AI 예측 시계열')
+          }
+          for (const s of interpolationSeries(idwRes.data.data.content, fromIso, toIso)) {
+            addTimeSeriesSite(compareDs, s, MAP_CONFIG.markers.interpolation, 'IDW 보간 시계열')
+          }
+        } else {
+          const [predRes, idwRes] = await Promise.all([
+            apiClient.get<ApiResponse<VizPoint[]>>('/viz/predictions/latest'),
+            apiClient.get<ApiResponse<PageResponse<InterpolationResult>>>('/interpolations?size=100'),
+          ])
+          if (cancelled || compare.isDestroyed()) return
+          for (const p of predRes.data.data) {
+            addMarker(compareDs, p.longitude, p.latitude, `${p.siteName} (예측)`,
+              MAP_CONFIG.markers.prediction,
+              buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude))
+            addStaticGrid(compareDs, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값')
+          }
+          const seen = new Set<string>()
+          for (const r of idwRes.data.data.content) {
+            const key = `${r.latitude.toFixed(4)},${r.longitude.toFixed(4)}`
+            if (seen.has(key)) continue
+            seen.add(key)
+            const name = r.targetName ?? `보간지점 ${r.id}`
+            addMarker(compareDs, r.longitude, r.latitude, name,
+              MAP_CONFIG.markers.interpolation,
+              buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude))
+            addStaticGrid(compareDs, r.longitude, r.latitude, r.pm25, name, 'IDW 보간값')
+          }
+        }
+      } catch (err) {
+        console.error('[MapPage] 듀얼맵 비교 데이터 로드 실패:', err)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      if (!main.isDestroyed()) {
+        main.camera.changed.removeEventListener(sync)
+        main.camera.percentageChanged = prevPercentageChanged
+        main.clock.onTick.removeEventListener(clockSync)
+      }
+      if (!compare.isDestroyed()) compare.destroy()
+    }
+    // seriesKey: [시계열 로드]로 기간이 바뀔 때 비교 뷰를 다시 그리기 위한 의존성
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dualMode, mode, seriesKey])
 
   // 공공 대기질 현재값 레이어 렌더링. 시계열 모드에서는 재생 엔티티를 유지하고,
   // 현재값 모드로 돌아오면(mode 변경) 현재 측정소·풍향을 다시 그린다.
@@ -835,6 +985,100 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicAir?.sido])
 
+  // 거리 측정 모드: 좌클릭으로 지점 추가(점+선+누적 거리 라벨), 우클릭으로 종료
+  useEffect(() => {
+    const viewer = viewerRef.current
+    const measureDs = measureDsRef.current
+    if (!measuring || !viewer || !measureDs) return
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
+    handler.setInputAction((click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+      const cartesian = viewer.camera.pickEllipsoid(
+        click.position, viewer.scene.globe.ellipsoid)
+      if (!cartesian) return
+      const carto = Cesium.Cartographic.fromCartesian(cartesian)
+      const point = {
+        latitude: Cesium.Math.toDegrees(carto.latitude),
+        longitude: Cesium.Math.toDegrees(carto.longitude),
+      }
+      const points = measurePointsRef.current
+      points.push(point)
+
+      measureDs.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude, 5),
+        point: {
+          pixelSize: 8,
+          color: Cesium.Color.YELLOW,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
+      })
+      if (points.length >= 2) {
+        const prev = points[points.length - 2]
+        measureDs.entities.add({
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray([
+              prev.longitude, prev.latitude, point.longitude, point.latitude]),
+            width: 3,
+            material: Cesium.Color.YELLOW,
+            clampToGround: true,
+          },
+        })
+        measureDs.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude, 5),
+          label: {
+            text: `${pathDistanceKm(points).toFixed(2)} km`,
+            font: '13px sans-serif',
+            fillColor: Cesium.Color.YELLOW,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -20),
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          },
+        })
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+    handler.setInputAction(() => setMeasuring(false),
+      Cesium.ScreenSpaceEventType.RIGHT_CLICK)
+
+    return () => {
+      handler.destroy()
+      measurePointsRef.current = []
+    }
+  }, [measuring])
+
+  /** 현재 지도 화면을 PNG로 저장 (보고서 '이미지 저장' 기능: capture_날짜.png) */
+  const captureScreen = () => {
+    const viewer = viewerRef.current
+    if (!viewer) return
+    viewer.render()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const d = new Date()
+    const link = document.createElement('a')
+    link.download = `capture_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.png`
+    link.href = viewer.scene.canvas.toDataURL('image/png')
+    link.click()
+  }
+
+  /** 배경지도 전환 (위성은 Cesium ion 토큰 필요) */
+  const switchBaseMap = async (kind: 'osm' | 'satellite') => {
+    const viewer = viewerRef.current
+    if (!viewer || kind === baseMap) return
+    setBaseMap(kind)
+    viewer.imageryLayers.removeAll()
+    if (kind === 'satellite') {
+      viewer.imageryLayers.addImageryProvider(await Cesium.createWorldImageryAsync())
+    } else {
+      viewer.imageryLayers.addImageryProvider(
+        new Cesium.OpenStreetMapImageryProvider({
+          url: 'https://tile.openstreetmap.org/',
+          maximumLevel: 19,
+        }))
+    }
+  }
+
   const flyToSite = (site: Site) => {
     viewerRef.current?.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(site.longitude, site.latitude - 0.04, 6000),
@@ -848,14 +1092,30 @@ export default function MapPage() {
     if (!sido || sido === selectedSido) return
     setSelectedSido(sido)
     loadPublicAir(sido)
-    const center = SIDO_CENTERS.find((c) => c.name === sido)
-    if (center) {
+    // 인천은 핵심 대상지(미추홀·남동·연수) 조망으로, 그 외 시도는 광역 조망으로 이동
+    const view = sido === '인천'
+      ? INCHEON_FOCUS_VIEW
+      : (() => {
+          const center = SIDO_CENTERS.find((c) => c.name === sido)
+          return center
+            ? { longitude: center.longitude, latitude: center.latitude, height: SIDO_VIEW_HEIGHT }
+            : null
+        })()
+    if (view) {
       viewerRef.current?.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(
-          center.longitude, center.latitude, SIDO_VIEW_HEIGHT),
+        destination: Cesium.Cartesian3.fromDegrees(view.longitude, view.latitude, view.height),
         duration: 1.8,
       })
     }
+  }
+
+  /** 핵심 대상지(인천 3구)로 카메라 이동 */
+  const flyToDistrict = (district: { latitude: number; longitude: number }) => {
+    viewerRef.current?.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(
+        district.longitude, district.latitude, DISTRICT_VIEW_HEIGHT),
+      duration: 1.8,
+    })
   }
 
   return (
@@ -911,6 +1171,74 @@ export default function MapPage() {
             ))}
           </select>
         </label>
+
+        {(!selectedSido || selectedSido === '인천') && (
+          <span className="flex items-center gap-1.5 text-sm text-gray-700">
+            <span className="text-gray-500">핵심 대상지</span>
+            {INCHEON_CORE_DISTRICTS.map((d) => (
+              <button
+                key={d.name}
+                type="button"
+                onClick={() => flyToDistrict(d)}
+                className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100"
+              >
+                {d.name}
+              </button>
+            ))}
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setDualMode(!dualMode)}
+          className={`rounded-md border px-2 py-1 text-xs ${
+            dualMode
+              ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
+              : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+          }`}
+          title="관측(좌)과 AI 예측·보간(우)을 나란히 비교"
+        >
+          듀얼맵
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMeasuring(!measuring)}
+          className={`rounded-md border px-2 py-1 text-xs ${
+            measuring
+              ? 'border-yellow-500 bg-yellow-500 text-white hover:bg-yellow-600'
+              : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+          }`}
+          title="좌클릭으로 지점 추가, 우클릭으로 종료"
+        >
+          {measuring ? '측정 중 (우클릭 종료)' : '거리 측정'}
+        </button>
+        <button
+          type="button"
+          onClick={() => measureDsRef.current?.entities.removeAll()}
+          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+          title="측정 결과 지우기"
+        >
+          측정 지우기
+        </button>
+        <button
+          type="button"
+          onClick={captureScreen}
+          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+          title="현재 지도 화면을 PNG로 저장"
+        >
+          화면 캡처
+        </button>
+        {(import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined) && (
+          <button
+            type="button"
+            onClick={() => switchBaseMap(baseMap === 'osm' ? 'satellite' : 'osm')}
+            className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+            title="배경지도 전환 (위성 ↔ 일반)"
+          >
+            {baseMap === 'osm' ? '위성 지도' : '일반 지도'}
+          </button>
+        )}
 
         {layers.airkorea && (
           <label className="flex items-center gap-1.5 text-sm text-gray-700">
@@ -1024,7 +1352,24 @@ export default function MapPage() {
       {error && <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
       {loading && <p className="text-sm text-gray-500">지도 데이터 불러오는 중...</p>}
 
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden rounded-lg border border-gray-200" />
+      <div className="flex min-h-0 flex-1 gap-2">
+        <div className="relative min-w-0 flex-1">
+          {dualMode && (
+            <span className="absolute left-2 top-2 z-10 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
+              관측·공공 (기준)
+            </span>
+          )}
+          <div ref={containerRef} className="h-full w-full overflow-hidden rounded-lg border border-gray-200" />
+        </div>
+        {dualMode && (
+          <div className="relative min-w-0 flex-1">
+            <span className="absolute left-2 top-2 z-10 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
+              AI 예측·보간 ({mode === 'series' ? '이력 재생' : '최신값'} · 좌측 카메라·시간 추종)
+            </span>
+            <div ref={compareContainerRef} className="h-full w-full overflow-hidden rounded-lg border border-gray-200" />
+          </div>
+        )}
+      </div>
 
       <p className="text-xs text-gray-400">
         박스를 클릭하면 상세정보가 표시됩니다 · 격자: 관측소당{' '}

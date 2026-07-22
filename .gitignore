@@ -56,3 +56,6 @@ Thumbs.db
 *.log
 logs/
 tmp/
+
+# === 브라우저 검증 산출물 (Playwright 플러그인) ===
+.playwright-mcp/

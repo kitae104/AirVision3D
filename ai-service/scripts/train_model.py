@@ -26,6 +26,8 @@ def main() -> None:
     parser.add_argument("--pretrained", action="store_true",
                         help="ImageNet 사전학습 가중치 사용 (최초 실행 시 다운로드)")
     parser.add_argument("--mad", action="store_true", help="MAD 이상치 보정 적용")
+    parser.add_argument("--solar", action="store_true",
+                        help="태양고도를 4번째 환경 특징으로 사용 (labels.csv에 위경도 필요)")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -33,7 +35,7 @@ def main() -> None:
         dataset_dir=args.dataset, models_dir=args.models_dir, model_name=args.name,
         epochs=args.epochs, batch_size=args.batch_size, learning_rate=args.lr,
         pretrained=args.pretrained, image_size=args.image_size,
-        apply_mad_correction=args.mad, seed=args.seed)
+        apply_mad_correction=args.mad, use_solar_altitude=args.solar, seed=args.seed)
 
     print("\n=== 학습 완료 ===")
     print(f"모델 저장 위치: {summary['model_dir']}")

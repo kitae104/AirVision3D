@@ -28,11 +28,11 @@ class PublicIdwControllerTest {
 
     @Test
     void 격자_표면을_공통_응답으로_반환한다() throws Exception {
-        IdwGridResponse res = new IdwGridResponse("인천", 2.0, 2, "AIRKOREA", true, false, 3,
+        IdwGridResponse res = new IdwGridResponse("인천", 2.0, 2, "IDW", "AIRKOREA", true, false, 3,
                 new IdwGridResponse.Bbox(37.3, 126.6, 37.7, 126.8),
                 List.of(new IdwGridCell(37.4, 126.65, 22.5, "보통"),
                         new IdwGridCell(37.6, 126.75, 18.0, "보통")));
-        when(service.grid(any(), any(), any())).thenReturn(res);
+        when(service.grid(any(), any(), any(), any())).thenReturn(res);
 
         mockMvc.perform(get("/api/air-quality/interpolation/grid").param("sido", "인천"))
                 .andExpect(status().isOk())
@@ -45,7 +45,7 @@ class PublicIdwControllerTest {
 
     @Test
     void 유효_소스가_없으면_400이다() throws Exception {
-        when(service.grid(any(), any(), any()))
+        when(service.grid(any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("유효한 실측 측정소가 없어 보간할 수 없습니다"));
 
         mockMvc.perform(get("/api/air-quality/interpolation/grid"))

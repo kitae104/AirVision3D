@@ -31,6 +31,7 @@ public class InterpolationService {
     public List<InterpolationResponse> run(InterpolationRequest request) {
         Instant baseTime = request.observedAt() != null ? request.observedAt() : Instant.now();
         double power = request.powerOrDefault();
+        String method = request.methodOrDefault();
 
         List<SourcePoint> sources = observationRepository.findLatestPm25PerSite(baseTime).stream()
                 .map(s -> new SourcePoint(s.getLatitude(), s.getLongitude(), s.getPm25()))
@@ -39,13 +40,21 @@ public class InterpolationService {
             throw new IllegalStateException("기준 시각 이전의 PM2.5 관측값이 없어 보간할 수 없습니다");
         }
 
+        // Modified IDW의 보정값은 대상 지점과 무관하므로 한 번만 계산해 재사용한다
+        double[] corrections = "MODIFIED_IDW".equals(method)
+                ? ModifiedIdwInterpolator.corrections(sources, power)
+                : null;
+
         List<InterpolationResult> results = request.targets().stream()
                 .map(target -> {
-                    double pm25 = IdwInterpolator.interpolate(
-                            sources, target.latitude(), target.longitude(), power);
+                    double pm25 = corrections != null
+                            ? ModifiedIdwInterpolator.estimate(
+                                    sources, corrections, target.latitude(), target.longitude(), power)
+                            : IdwInterpolator.interpolate(
+                                    sources, target.latitude(), target.longitude(), power);
                     return new InterpolationResult(
                             target.name(), target.latitude(), target.longitude(),
-                            baseTime, "OBSERVATION", "IDW", power, round(pm25));
+                            baseTime, "OBSERVATION", method, power, round(pm25));
                 })
                 .toList();
 

@@ -100,8 +100,9 @@ export default function DashboardPage() {
     const now = Date.now()
     const from = new Date(now - 48 * 3600 * 1000).toISOString()
     const to = new Date(now).toISOString()
+    // 프로젝트 핵심 대상지인 인천 기준으로 실측 추이를 표시한다
     apiClient.get<ApiResponse<MeasurementHourlyPoint[]>>(
-      `/public-data/history/measurements/hourly?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+      `/public-data/history/measurements/hourly?sido=${encodeURIComponent('인천')}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
       .then((res) => setAirHistory(res.data.data.map((p) => ({
         time: new Date(p.hour).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit' }),
         pm25: p.avgPm25 != null ? Math.round(p.avgPm25 * 10) / 10 : null,
@@ -322,7 +323,7 @@ export default function DashboardPage() {
         <div className="grid gap-6 xl:grid-cols-2">
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <h4 className="mb-3 text-sm font-semibold text-gray-700">
-              공공 실측 PM2.5 추이 (수도권 시간별 평균, 최근 48h)
+              공공 실측 PM2.5 추이 (인천 시간별 평균, 최근 48h)
             </h4>
             {airHistory.length === 0 ? (
               <p className="py-16 text-center text-sm text-gray-400">

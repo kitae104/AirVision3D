@@ -21,12 +21,14 @@ public class PublicIdwController {
         this.service = service;
     }
 
-    @Operation(summary = "공공 실측 기반 IDW 격자 표면 (현재 PM2.5)")
+    @Operation(summary = "공공 실측 기반 IDW 격자 표면 (현재 PM2.5)",
+            description = "method=IDW(기본) 또는 MODIFIED_IDW(보정 가중치, 최종보고서 알고리즘)")
     @GetMapping("/grid")
     public ApiResponse<IdwGridResponse> grid(
             @RequestParam(required = false) String sido,
             @RequestParam(required = false) Double power,
-            @RequestParam(required = false) Integer resolution) {
-        return ApiResponse.ok(service.grid(sido, power, resolution));
+            @RequestParam(required = false) Integer resolution,
+            @RequestParam(required = false) String method) {
+        return ApiResponse.ok(service.grid(sido, power, resolution, method));
     }
 }

@@ -3,6 +3,7 @@
 import io
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -90,6 +91,7 @@ class TrainRequest(BaseModel):
     pretrained: bool = False
     image_size: int = Field(default=224, ge=64, le=512)
     apply_mad_correction: bool = False
+    use_solar_altitude: bool = False
     seed: int = 42
 
 
@@ -117,7 +119,8 @@ def train(request: TrainRequest) -> ApiResponse:
             model_name=request.model_name, epochs=request.epochs,
             batch_size=request.batch_size, learning_rate=request.learning_rate,
             pretrained=request.pretrained, image_size=request.image_size,
-            apply_mad_correction=request.apply_mad_correction, seed=request.seed,
+            apply_mad_correction=request.apply_mad_correction,
+            use_solar_altitude=request.use_solar_altitude, seed=request.seed,
             grades_config_path=settings.grades_config_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -137,12 +140,31 @@ async def predict(
         temperature: float = Form(...),
         humidity: float = Form(..., ge=0, le=100),
         wind_speed: float = Form(..., ge=0),
+        latitude: float | None = Form(default=None, ge=-90, le=90),
+        longitude: float | None = Form(default=None, ge=-180, le=180),
+        captured_at: str | None = Form(default=None,
+                                       description="촬영 시각 ISO-8601 (태양고도 계산용, 생략 시 현재)"),
 ) -> ApiResponse:
-    """이미지 + 환경데이터로 PM2.5를 예측한다."""
+    """이미지 + 환경데이터로 PM2.5를 예측한다.
+
+    태양고도를 사용하는 모델은 latitude/longitude가 필수다 (누락 시 400).
+    """
     predictor = _load_predictor(model_name)
     try:
         pil_image = Image.open(io.BytesIO(await image.read()))
     except Exception:
         raise HTTPException(status_code=400, detail="이미지 파일을 해석할 수 없습니다")
-    result = predictor.predict(pil_image, temperature, humidity, wind_speed)
+    when = None
+    if captured_at:
+        try:
+            when = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400,
+                                detail=f"captured_at 형식 오류 (ISO-8601 필요): {captured_at}")
+    try:
+        result = predictor.predict(pil_image, temperature, humidity, wind_speed,
+                                   latitude=latitude, longitude=longitude,
+                                   captured_at=when)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return ApiResponse.ok({**result, "model_name": model_name})

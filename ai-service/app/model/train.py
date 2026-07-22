@@ -21,7 +21,12 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from app.data.dataset import AirQualityDataset, EnvScaler
-from app.data.schema import load_labels_csv
+from app.data.schema import (
+    ENV_FEATURE_COLUMNS,
+    SOLAR_FEATURE_COLUMN,
+    add_solar_altitude,
+    load_labels_csv,
+)
 from app.data.split import split_by_date
 from app.model.grades import load_grade_scale
 from app.model.metrics import full_metrics
@@ -58,6 +63,7 @@ def train_model(
         image_size: int = 224,
         roi: Roi | None = None,
         apply_mad_correction: bool = False,
+        use_solar_altitude: bool = False,
         seed: int = 42,
         grades_config_path: str = "config/grades.json",
 ) -> dict:
@@ -71,8 +77,12 @@ def train_model(
 
     # 데이터 준비 (날짜 단위 분리, scaler는 train으로만 fit)
     df = load_labels_csv(dataset_dir)
+    env_columns = list(ENV_FEATURE_COLUMNS)
+    if use_solar_altitude:
+        df = add_solar_altitude(df)  # 위경도 컬럼 필요 (없으면 ValueError)
+        env_columns.append(SOLAR_FEATURE_COLUMN)
     split = split_by_date(df, seed=seed)
-    scaler = EnvScaler.fit(split["train"])
+    scaler = EnvScaler.fit(split["train"], columns=env_columns)
 
     def make_loader(part_df, shuffle):
         dataset = AirQualityDataset(
@@ -84,7 +94,7 @@ def train_model(
     val_loader = make_loader(split["val"], shuffle=False)
     test_loader = make_loader(split["test"], shuffle=False)
 
-    model = MultimodalPm25Net(pretrained=pretrained).to(device)
+    model = MultimodalPm25Net(pretrained=pretrained, env_dim=len(env_columns)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.SmoothL1Loss()
 
@@ -125,6 +135,8 @@ def train_model(
         "image_size": image_size,
         "roi": roi.__dict__ if roi else None,
         "apply_mad_correction": apply_mad_correction,
+        "use_solar_altitude": use_solar_altitude,
+        "env_columns": env_columns,
         "epochs": epochs,
         "batch_size": batch_size,
         "learning_rate": learning_rate,

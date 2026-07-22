@@ -3,7 +3,7 @@
 > 상태 정의: NOT_STARTED / IN_PROGRESS / BLOCKED / COMPLETED(코드 작성 완료) / VERIFIED(실행·테스트 성공 확인)
 > 갱신 규칙: 각 작업 완료 시 본 문서를 갱신한다. 테스트를 실행하지 못한 경우 사유를 기록한다.
 
-최종 갱신: 2026-07-21
+최종 갱신: 2026-07-22
 
 ## Phase 요약
 
@@ -28,6 +28,9 @@
 | 16 | 브라우저 육안 확인 + 지도 결함 2건 수정(3순위 3번) | VERIFIED | Playwright로 전 화면 육안 확인(2026-07-22), Phase 6·7·8·13 VERIFIED 승격. StrictMode 비동기 경합("요청 처리 중 오류")·OSM z>19 CORS 오류 수정 |
 | 17 | 지도 초기 뷰 인천 중심 + 전체화면 수정 | VERIFIED | 초기 카메라를 기본 시도(인천) 중심으로, 전체화면 대상을 body→지도 컨테이너로 수정. Playwright 실검증(2026-07-22): fullscreenElement=지도, 1536x720 전체 확대·ESC 복귀 확인 |
 | 18 | 잔여 검증 일괄 처리(경보 Mock 검증·샘플 리시드·Minor 폴리시) | VERIFIED | 강제 Mock으로 경보 권역 육안 검증(Phase 15 승격), 리시드 511건→시간별 차트 24포인트 복구, IDW 경계값 테스트 2건(백엔드 130), stale 가드 일관화(2026-07-22) |
+| 19 | 최종보고서 정합성 점검 + 인천 핵심 3구(미추홀·남동·연수) 중심화 | VERIFIED | 기반 문서(최종보고서 PDF 78쪽) 전수 확인·격차 분석. 초기 뷰 3구 조망+구 이동 버튼, V4 인천 관측소 6곳, 대시보드 인천 기준. 실 DB·Playwright 검증(2026-07-22) |
+| 20 | 최종보고서 격차 기능 4종(Modified IDW·태양고도·듀얼맵·뷰어 유틸) | VERIFIED | Python 교차검증(1e-6)·백엔드(신규 11건)·AI 73건·프론트 34건 통과. 실 DB·실 AirKorea·Playwright 실검증(2026-07-22) |
+| 21 | 듀얼맵 시계열 이력 재생(Phase 20 제약 해소) | VERIFIED | 우측 비교 뷰가 기간 내 예측·보간 이력을 좌측 시계와 동기 재생. 프론트 38건 통과, Playwright 실검증(2026-07-22) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -620,3 +623,181 @@ Chrome 확장 연결이 안 되어 **Playwright**(플러그인)로 실 스택에
 
 - `backend/src/test/.../PublicIdwServiceTest.java`(테스트 2건),
   `frontend/src/pages/MapPage.tsx`(optional chain 정리·stale 가드), `docs/progress.md`(본 절)
+
+## Phase 19. 최종보고서 정합성 점검 + 인천 핵심 3구 중심화 — VERIFIED (2026-07-22)
+
+기반 문서 `docs/AI 영상인식 기반 3차원 미세먼지정보 통합시스템 시작품 제작_최종보고서.pdf`
+(2022, KICT/이안에스아이티, 78쪽)를 전수 확인하고 현재 구현과 비교했다. 아울러 사용자 결정에
+따라 **타겟 지역을 인천(핵심: 미추홀구·남동구·연수구)으로 확정**하고 지도·데이터·대시보드를
+인천 중심으로 정비했다.
+
+### 보고서 대비 정합성 요약
+
+- 일치(이미 반영): 이미지+기상(온·습·풍속)→PM2.5 회귀 모델과 등급 분류, ROI 지정,
+  MAD 이상치 보정, 전이학습 옵션(보고서 결론은 전이학습 무 채택 — 현재 기본값 false와 일치),
+  입체격자+시간별 색상 변화(보고서 CZML ↔ 현재 TimeIntervalCollectionProperty, 동일 효과),
+  레이어 구분(공공/관측/예측/보간), 객체 클릭 정보 조회, 타임라인 재생, 공공(AirKorea)·기상청
+  수집 및 통합 저장소, 로그인·사용자 인증
+- 의도된 차이(MVP 결정 유지): ResNet-152 → ResNet18(CLAUDE.md 금지사항: 초기 대형 모델),
+  7x7x3 격자 → 3x3x2(성능 확인 후 확장 항목), 3DTiles 지형/건물(고양·안양 원천데이터 전제 —
+  대상지가 인천으로 변경되어 원천데이터 없음, MVP 제외 유지), 사용자 그룹 관리(금지사항),
+  eGovFrame/JSP → Spring Boot+React(기술 현대화)
+- 미반영 격차(추가 기능 후보, 아래 "다음 권장 작업"): Modified IDW(보고서 핵심 보간 알고리즘,
+  1·2차 가중치 보정 — 현재는 일반 IDW), 모델 입력 태양고도 추가(보고서 독립변수 4종 중 미반영 1종),
+  듀얼맵(예측/보간 vs 관측 비교), 화면 캡처·측정 도구·위성 배경지도 전환
+
+### 인천 핵심 3구 중심화 구현
+
+- [x] `frontend/src/config/sido.ts`: `INCHEON_CORE_DISTRICTS`(미추홀·남동·연수 중심좌표),
+      `DISTRICT_VIEW_HEIGHT`(12km), `INCHEON_FOCUS_VIEW`(3구 조망 126.69/37.433/40km) 추가
+- [x] `mapConfig.initialView`를 3구 조망으로 변경(160km 광역 → 40km 핵심권), 테스트로
+      `INCHEON_FOCUS_VIEW`와 동일성 고정
+- [x] MapPage: 인천 선택 시 "핵심 대상지" 구 이동 버튼 3개 표시(보고서의 "사업대상지 지도 이동"
+      기능 대응), 시도 드롭다운에서 인천 선택 시 광역 대신 3구 조망으로 flyTo
+- [x] V4 마이그레이션: 인천 3구 자체 관측소 6곳(미추홀주안·미추홀용현·남동구월·남동논현·
+      연수동춘·연수송도) + 최근 7일 합성 관측값(V2와 동일 생성식, 기존 데이터 무삭제).
+      리시더는 전체 관측소 대상이므로 신규 관측소도 이후 리시드에 자동 포함
+- [x] 대시보드: 공공 실측 추이 차트를 `sido=인천`으로 고정(제목 "인천 시간별 평균"),
+      현재 대기질·예보 카드는 기존 기본 시도(인천) 유지
+
+### 테스트·검증 결과
+
+- 프론트 Vitest **29건 통과**(sido 신규 4건 포함), oxlint 무경고, `npm run build` 통과
+- 백엔드 `gradlew test` **BUILD SUCCESSFUL**(130건)
+- 실 DB 실기동: V4 적용 후 `GET /api/sites` 13곳(신규 6곳 좌표 확인), 신규 관측소 관측 169건
+  (7일×24h+1), `history/measurements/hourly?sido=인천` 6포인트, `viz/observations/latest` 13곳
+- Playwright 육안 확인: 초기 화면이 미추홀·남동·연수 조망(신규 격자 6곳 + 공공 측정소 43곳 렌더),
+  "핵심 대상지" 버튼 렌더 및 미추홀구 클릭 시 flyTo 확인, 대시보드 "공공 실측 PM2.5 추이
+  (인천 시간별 평균)" 데이터 렌더, 콘솔 에러 0건
+
+### 변경 파일
+
+- 신규: `backend/src/main/resources/db/migration/V4__seed_incheon_core_sites.sql`
+- 프론트: `config/sido.ts`, `config/sido.test.ts`, `config/mapConfig.ts`,
+  `pages/MapPage.tsx`(구 이동 버튼·인천 조망), `pages/DashboardPage.tsx`(인천 고정)
+- 문서: `docs/user-guide.html`(§7·업데이트 이력 v1.8), `docs/progress.md`(본 절)
+
+### 다음 권장 작업 (보고서 격차 기반, 우선순위순)
+
+→ **전체 완료(2026-07-22, Phase 20)**: Modified IDW·태양고도·듀얼맵·뷰어 유틸리티 3종
+
+## Phase 20. 최종보고서 격차 기능 4종 구현 — VERIFIED (2026-07-22)
+
+Phase 19에서 식별한 보고서 대비 격차 4건을 우선순위 순서로 모두 구현·검증했다.
+
+### ① Modified IDW (보고서 §4.1.2, 표 3-11)
+
+- [x] `ModifiedIdwInterpolator`: 보고서 7단계 절차(거리→1차 가중치→leave-one-out 1차 보간→
+      절대오차→보정값 1+|e|/max|e|→2차 가중치→최종 보간) 구현. 보고서 코드의 결함 2건은
+      의도적으로 보정(동일좌표 실측 제외 → 실측 반환, 오차 전부 0 → 일반 IDW 폴백)하고
+      Javadoc에 근거 기록. 거리는 기존 `GeoUtils.haversineKm` 재사용(보고서 2차 검증과 동일 방식)
+- [x] Python 기준 구현 `scripts/modified_idw_reference.py` 작성, **교차검증 1e-6 이내 일치**
+      (보정값 8개·보간값 3개 기대값, Phase 3 IDW와 동일한 검증 방식)
+- [x] API 연결: `POST /api/interpolations/run`에 `method`(IDW|MODIFIED_IDW, 기본 IDW) 추가,
+      결과 `algorithm` 컬럼에 방법 기록. `GET /api/air-quality/interpolation/grid`에도
+      `method` 파라미터 추가(응답에 method 포함, 보정값은 격자 전체에서 1회 계산)
+- [x] 프론트: IDW 보간 화면에 "보간 방법" 선택 추가
+- [x] 테스트: `ModifiedIdwInterpolatorTest` 7건, 컨트롤러 2건, `PublicIdwServiceTest` 2건 추가
+- [x] 실검증: run API 표준 17.4568 vs Modified 17.1615(인천시청), 잘못된 method → 400,
+      실 AirKorea 소스 grid 36셀 중 34셀 값 상이, UI 실행 → 이력 알고리즘 MODIFIED_IDW 확인
+
+### ② 태양고도 입력 (보고서 모델 독립변수 4종 완성)
+
+- [x] `app/common/solar.py`: NOAA 근사식(균시차·적위) 태양고도 계산. naive 시각은 KST 규약
+- [x] 파이프라인: labels.csv 위경도 컬럼(선택) + `add_solar_altitude` 파생, `EnvScaler`
+      컬럼 가변화(scaler.json에 columns 저장, 구버전 파일은 3특징 폴백 — 하위 호환),
+      `MultimodalPm25Net` env_dim 가변(config `env_columns`)
+- [x] 학습: CLI `--solar` / API `use_solar_altitude`. 추론: 태양고도 모델은 latitude/longitude
+      필수(누락 시 400), captured_at 생략 시 현재 시각. Spring은 관측소 좌표+현재 시각을
+      항상 multipart로 전달(미사용 모델은 무시 — 기존 모델 하위 호환)
+- [x] 샘플 생성기: 인천 핵심 3구 좌표를 관측소별 위경도로 기록
+- [x] 테스트: `test_solar.py` 10건 + 태양고도 학습·추론 스모크 3건 → AI 총 **73건 통과**
+- [x] 실검증: 데이터셋 재생성(120장) → `resnet18_solar_v1` 학습(env 4차원 확인) →
+      Spring 경유 예측 성공(미추홀주안, 좌표·시각 자동 전달), 기존 3특징 모델 병행 동작,
+      AI 직접 호출 시 위경도 누락 → 400 + 안내 메시지
+
+### ③ 듀얼맵 (보고서 그림 3-73~75)
+
+- [x] MapPage "듀얼맵" 토글: 좌(관측·공공, 기준) / 우(AI 예측·보간, 비교) 분할.
+      우측 뷰어는 좌측 카메라 추종(percentageChanged 0.001 동기화), 직접 조작 차단,
+      경량 위젯 구성. 예측/보간 데이터는 loadCurrent와 동일 API로 별도 로드
+- [x] 실검증(Playwright): 분할 렌더, 우측에 예측(미추홀주안)·보간 격자만 표시,
+      미추홀구 이동 시 양쪽 카메라 동기 이동 확인
+
+### ④ 뷰어 유틸리티 (보고서 §4.3.3 (3))
+
+- [x] **거리 측정**: 좌클릭 지점 추가(점+노란 선+누적 km 라벨), 우클릭 종료, [측정 지우기].
+      `utils/geo.ts`(haversineKm·pathDistanceKm, 백엔드 GeoUtils와 동일 규약) + 테스트 5건
+- [x] **화면 캡처**: `capture_날짜_시각.png` 다운로드 (보고서 파일명 규약,
+      Viewer `preserveDrawingBuffer` 활성화)
+- [x] **배경지도 전환**: ion 토큰 존재 시 [위성/일반] 토글(createWorldImagery ↔ OSM),
+      토큰 없으면 버튼 미표시
+- [x] 실검증(Playwright): 측정 2지점 8.17km 라벨·우클릭 종료, 캡처 다운로드 파일명 확인.
+      배경 전환은 ion 토큰 미설정 환경이라 버튼 미표시가 정상 동작(위성 전환은 토큰 설정 후 확인 필요)
+
+### 테스트 결과 종합
+
+- 백엔드 `gradlew test` BUILD SUCCESSFUL(신규 11건 포함), AI `pytest` 73건,
+  프론트 `vitest` 34건(신규 geo 5건)·빌드·oxlint 통과
+- 실기동: Modified IDW run/grid, 태양고도 모델 Spring 연동, 듀얼맵·측정·캡처 Playwright
+  육안 확인 — 콘솔 에러 0건
+
+### 변경 파일
+
+- 백엔드 신규: `interpolation/ModifiedIdwInterpolator.java`, 테스트 1종. 수정:
+  `InterpolationRequest`(method)·`InterpolationService`·`PublicIdwService`(+오버로드·검증)·
+  `PublicIdwController`·`IdwGridResponse`(method 필드)·`AiServiceClient`(+위치/시각 오버로드)·
+  `PredictionService`, 기존 테스트 2종 갱신
+- AI 신규: `app/common/solar.py`, `tests/test_solar.py`. 수정: `schema.py`(+add_solar_altitude)·
+  `dataset.py`(EnvScaler columns)·`network.py` 주석 그대로·`train.py`·`predict.py`·
+  `models_router.py`·`sample/generator.py`(+위경도)·`scripts/train_model.py`(--solar)·
+  `tests/test_model.py`(+솔라 스모크)
+- 프론트 신규: `utils/geo.ts`·`utils/geo.test.ts`. 수정: `pages/InterpolationPage.tsx`(방법 선택)·
+  `pages/MapPage.tsx`(듀얼맵·측정·캡처·배경 전환)
+- 스크립트: `scripts/modified_idw_reference.py`(신규)
+- 문서: `docs/user-guide.html`(§7·§11·이력 v1.9), `docs/progress.md`(본 절)
+
+### 알려진 제약
+
+- ~~듀얼맵 우측 뷰어는 현재값(최신 예측·보간)만 표시한다~~ → **해결(Phase 21)**: 시계열 이력 재생 지원
+- 거리 측정 중에도 엔티티 클릭 시 InfoBox가 열릴 수 있다(빈 지역을 클릭해 측정 권장)
+- 위성 배경 전환은 Cesium ion 토큰이 있어야 노출된다(현재 개발 환경 미설정으로 미육안검증)
+- `resnet18_solar_v1` 지표는 합성 120장·3 epochs 결과로 파이프라인 검증용이다(성능 인용 금지)
+
+## Phase 21. 듀얼맵 시계열 이력 재생 — VERIFIED (2026-07-22)
+
+Phase 20의 알려진 제약 "듀얼맵 우측 뷰어는 현재값 전용"을 해소했다. [시계열 로드] 시
+우측 비교 뷰어가 선택 기간의 **AI 예측·보간 이력**을 좌측 타임라인과 동기 재생한다.
+
+### 구현 내용
+
+- [x] `utils/compareSeries.ts` 신규: 저장된 예측 이력(`/predictions`)을 관측소별로,
+      보간 이력(`/interpolations`)을 대상 좌표별로 묶어 기간 필터·시각 정렬한
+      시계열(SeriesSite 호환)로 변환. 좌표 미상 관측소·기간 밖 이력은 제외.
+      테스트 4건(`compareSeries.test.ts`)
+- [x] `addTimeSeriesSite`에 마커 색·구분 텍스트 매개변수 추가(기본값은 기존 관측 시계열과
+      동일 — 기존 호출 무영향). 예측은 주황, 보간은 보라 마커로 구분
+- [x] 듀얼맵 effect 확장: ① 좌→우 **시계 동기화**(main clock onTick → compare clock),
+      ② 시계열 모드면 기간 내 예측·보간 이력을 TimeIntervalCollection 격자로 렌더
+      (데이터 없는 시간은 availability로 숨김 — 관측 시계열과 동일 규약),
+      현재값 모드면 기존처럼 최신값 렌더. effect 의존성 [dualMode, mode, seriesKey]
+      (`seriesKey`는 [시계열 로드] 성공 시 증가 — 기간 변경 재렌더 신호,
+      datetime 입력 타이핑마다 뷰어가 재생성되지 않도록 from/to는 의존성에서 제외)
+- [x] 우측 상단 라벨에 모드 표시: "최신값" / "이력 재생" · 좌측 카메라·시간 추종
+
+### 테스트·검증 결과
+
+- 프론트 Vitest **38건 통과**(신규 compareSeries 4건), tsc·oxlint·빌드 통과
+- Playwright 실검증(실 스택): 듀얼맵 켠 상태에서 [시계열 로드] → 우측 라벨 "이력 재생"
+  전환, 타임라인 이동 시 우측에 "미추홀주안 (예측) 80.3㎍/㎥ 매우나쁨" 격자와
+  "인천시청 (보간) 17.5㎍/㎥ 보통" 격자가 해당 시각 구간에 표시(같은 시각 중복 예측은
+  최신 실행값 우선 — TimeIntervalCollection 규약). [현재값 보기] 복귀 시 라벨 "최신값"
+  전환 확인. 콘솔 에러 0건
+- 참고: 이력 재생은 기간 안에 예측·보간 실행 이력이 있어야 표시된다(시연 전 AI 예측/보간
+  1회 이상 실행 권장)
+
+### 변경 파일
+
+- 신규: `frontend/src/utils/compareSeries.ts`, `frontend/src/utils/compareSeries.test.ts`
+- 수정: `frontend/src/pages/MapPage.tsx`(시계 동기화·시계열 분기·seriesKey·라벨),
+  `docs/user-guide.html`(§7 듀얼맵·이력 v1.10), `docs/progress.md`(본 절)

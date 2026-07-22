@@ -67,6 +67,31 @@ class InterpolationControllerTest {
     }
 
     @Test
+    void run_modifiedIdwMethod_returns201() throws Exception {
+        when(interpolationService.run(any())).thenReturn(List.of(
+                new InterpolationResponse(2L, "목표지점", 37.43, 126.69, 22.5467,
+                        "MODIFIED_IDW", 2.0, "OBSERVATION", Instant.parse("2026-07-22T09:00:00Z"))));
+
+        mockMvc.perform(post("/api/interpolations/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"power":2.0,"method":"MODIFIED_IDW","targets":[{"name":"목표지점","latitude":37.43,"longitude":126.69}]}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data[0].algorithm").value("MODIFIED_IDW"));
+    }
+
+    @Test
+    void run_invalidMethod_returns400() throws Exception {
+        mockMvc.perform(post("/api/interpolations/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"method":"KRIGING","targets":[{"latitude":37.5,"longitude":127.0}]}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void run_missingLatitude_returns400() throws Exception {
         mockMvc.perform(post("/api/interpolations/run")
                         .contentType(MediaType.APPLICATION_JSON)

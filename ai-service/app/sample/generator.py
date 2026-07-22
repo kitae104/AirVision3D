@@ -19,7 +19,17 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from app.data.schema import REQUIRED_COLUMNS
+from app.data.schema import LOCATION_COLUMNS, REQUIRED_COLUMNS
+
+# 합성 관측소 좌표: 인천 핵심 3구 (V4__seed_incheon_core_sites.sql과 동일 지역).
+# 태양고도 특징 학습 시 위경도가 필요하므로 labels.csv에 함께 기록한다.
+_SITE_COORDS = [
+    (37.4646, 126.6803),  # 미추홀주안
+    (37.4487, 126.7016),  # 남동구월
+    (37.4090, 126.6660),  # 연수동춘
+    (37.4013, 126.7300),  # 남동논현
+    (37.3925, 126.6350),  # 연수송도
+]
 
 
 def _render_image(rng: np.random.Generator, pm25: float,
@@ -71,6 +81,7 @@ def generate_sample_dataset(
     rows = []
     base = pd.Timestamp(start_date)
     for site_id in range(1, n_sites + 1):
+        site_lat, site_lon = _SITE_COORDS[(site_id - 1) % len(_SITE_COORDS)]
         site_phase = rng.uniform(0, 2 * math.pi)
         for day in range(n_days):
             # 날짜별 기저 오염도 (일 단위 변동)
@@ -98,8 +109,10 @@ def generate_sample_dataset(
                     "humidity": round(humidity, 1),
                     "wind_speed": round(wind_speed, 1),
                     "pm25": round(pm25, 1),
+                    "latitude": site_lat,
+                    "longitude": site_lon,
                 })
 
-    df = pd.DataFrame(rows, columns=REQUIRED_COLUMNS)
+    df = pd.DataFrame(rows, columns=REQUIRED_COLUMNS + LOCATION_COLUMNS)
     df.to_csv(out_dir / "labels.csv", index=False)
     return df

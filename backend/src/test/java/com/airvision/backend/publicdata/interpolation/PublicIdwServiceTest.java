@@ -127,6 +127,39 @@ class PublicIdwServiceTest {
     }
 
     @Test
+    void method는_기본_IDW이고_MODIFIED_IDW는_다른_격자값을_낸다() {
+        givenStations(
+                station("송도", 37.38, 126.65, true, 12.0, true),
+                station("부평", 37.50, 126.72, true, 40.0, true),
+                station("검단", 37.60, 126.68, true, 25.0, true));
+
+        IdwGridResponse plain = service.grid("인천", 2.0, 6);
+        IdwGridResponse modified = service.grid("인천", 2.0, 6, "MODIFIED_IDW");
+
+        assertThat(plain.method()).isEqualTo("IDW");
+        assertThat(modified.method()).isEqualTo("MODIFIED_IDW");
+        // 보정 가중치가 적용되어 적어도 한 셀은 값이 달라진다 (좌표·bbox는 동일)
+        boolean anyDifferent = false;
+        for (int i = 0; i < plain.cells().size(); i++) {
+            assertThat(modified.cells().get(i).latitude())
+                    .isEqualTo(plain.cells().get(i).latitude());
+            if (Math.abs(modified.cells().get(i).pm25() - plain.cells().get(i).pm25()) > 0.05) {
+                anyDifferent = true;
+            }
+        }
+        assertThat(anyDifferent).isTrue();
+    }
+
+    @Test
+    void 잘못된_method는_예외다() {
+        givenStations(station("송도", 37.4, 126.7, true, 20.0, true));
+
+        assertThatThrownBy(() -> service.grid("인천", 2.0, 8, "KRIGING"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("method");
+    }
+
+    @Test
     void 소스_한_점이면_bbox가_최소_여백만큼_확장된다() {
         givenStations(station("송도", 37.4, 126.7, true, 20.0, true));
 

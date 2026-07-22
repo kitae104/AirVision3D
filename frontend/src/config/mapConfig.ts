@@ -1,8 +1,9 @@
 /** CesiumJS 3D 시각화 설정 (하드코딩 대신 이 파일에서 관리) */
 
 export const MAP_CONFIG = {
-  /** 초기 카메라 위치 (기본 시도인 인천 중심 상공 — config/sido.ts 인천 좌표와 동일) */
-  initialView: { longitude: 126.7052, latitude: 37.4563, height: 160_000 },
+  /** 초기 카메라 위치: 핵심 대상지인 인천 미추홀·남동·연수 3구 조망
+   *  (config/sido.ts INCHEON_FOCUS_VIEW와 동일 값 유지) */
+  initialView: { longitude: 126.69, latitude: 37.433, height: 40_000 },
 
   /** 관측소당 3D 박스 격자 크기 (MVP: 3x3x2, 성능 확인 후 확장 가능) */
   grid: {

@@ -28,6 +28,35 @@ REQUIRED_COLUMNS = [
 ENV_FEATURE_COLUMNS = ["temperature", "humidity", "wind_speed"]
 TARGET_COLUMN = "pm25"
 
+# 태양고도 특징 (선택): labels.csv의 위경도 컬럼에서 파생 계산한다
+SOLAR_FEATURE_COLUMN = "solar_altitude"
+LOCATION_COLUMNS = ["latitude", "longitude"]
+
+
+def add_solar_altitude(df: pd.DataFrame) -> pd.DataFrame:
+    """captured_at + 위경도로 태양고도 컬럼을 파생해 붙인 복사본을 반환한다.
+
+    Raises:
+        ValueError: latitude/longitude 컬럼이 없거나 결측일 때
+    """
+    from app.common.solar import solar_elevation_deg
+
+    missing = [c for c in LOCATION_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"태양고도 계산에는 위경도 컬럼이 필요합니다 (누락: {missing}). "
+            "labels.csv에 latitude/longitude를 포함해 데이터셋을 다시 생성하세요")
+    if df[LOCATION_COLUMNS].isna().any().any():
+        raise ValueError("latitude/longitude에 결측값이 있습니다")
+
+    out = df.copy()
+    out[SOLAR_FEATURE_COLUMN] = [
+        round(solar_elevation_deg(row.latitude, row.longitude,
+                                  row.captured_at.to_pydatetime()), 4)
+        for row in out.itertuples()
+    ]
+    return out
+
 
 def load_labels_csv(dataset_dir: str | Path) -> pd.DataFrame:
     """labels.csv를 로드하고 스키마를 검증한다.

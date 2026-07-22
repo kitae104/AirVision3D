@@ -15,6 +15,7 @@ interface TargetRow {
 /** 관리자: IDW 보간 실행 */
 export default function InterpolationPage() {
   const [power, setPower] = useState('2.0')
+  const [method, setMethod] = useState<'IDW' | 'MODIFIED_IDW'>('IDW')
   const [targets, setTargets] = useState<TargetRow[]>([
     { name: '서울숲', latitude: '37.5443', longitude: '127.0374' },
   ])
@@ -44,6 +45,7 @@ export default function InterpolationPage() {
         '/interpolations/run',
         {
           power: Number(power),
+          method,
           targets: targets.map((t) => ({
             name: t.name || null,
             latitude: Number(t.latitude),
@@ -68,11 +70,27 @@ export default function InterpolationPage() {
       </p>
 
       <form onSubmit={submit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="w-48">
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            거리 가중치 지수 p (0.1~10)
-          </label>
-          <input type="number" step="0.1" min={0.1} max={10} value={power} onChange={(e) => setPower(e.target.value)} className={inputCls} />
+        <div className="flex flex-wrap gap-4">
+          <div className="w-48">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              거리 가중치 지수 p (0.1~10)
+            </label>
+            <input type="number" step="0.1" min={0.1} max={10} value={power} onChange={(e) => setPower(e.target.value)} className={inputCls} />
+          </div>
+          <div className="w-56">
+            <label className="mb-1 block text-sm font-medium text-gray-700">보간 방법</label>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value as 'IDW' | 'MODIFIED_IDW')}
+              className={inputCls}
+            >
+              <option value="IDW">일반 IDW</option>
+              <option value="MODIFIED_IDW">Modified IDW (보정 가중치)</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-400">
+              Modified IDW는 관측지점별 1차 보간 오차로 가중치를 보정합니다
+            </p>
+          </div>
         </div>
 
         <div>

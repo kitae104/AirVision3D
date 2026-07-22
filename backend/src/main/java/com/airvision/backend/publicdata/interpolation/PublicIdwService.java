@@ -2,6 +2,7 @@ package com.airvision.backend.publicdata.interpolation;
 
 import com.airvision.backend.dashboard.GradeProperties;
 import com.airvision.backend.interpolation.IdwInterpolator;
+import com.airvision.backend.interpolation.ModifiedIdwInterpolator;
 import com.airvision.backend.publicdata.airkorea.AirKoreaService;
 import com.airvision.backend.publicdata.airkorea.dto.CurrentAirQualityResponse;
 import com.airvision.backend.publicdata.airkorea.dto.StationAirQuality;
@@ -33,8 +34,13 @@ public class PublicIdwService {
     }
 
     public IdwGridResponse grid(String sido, Double power, Integer resolution) {
+        return grid(sido, power, resolution, null);
+    }
+
+    public IdwGridResponse grid(String sido, Double power, Integer resolution, String method) {
         double p = validatePower(power);
         int n = validateResolution(resolution);
+        String m = validateMethod(method);
         CurrentAirQualityResponse current = airKoreaService.current(sido);
 
         List<IdwInterpolator.SourcePoint> sources = new ArrayList<>();
@@ -67,20 +73,37 @@ public class PublicIdwService {
 
         double latSpan = maxLat - minLat;
         double lonSpan = maxLon - minLon;
+        // Modified IDW 보정값은 셀과 무관하므로 격자 전체에서 한 번만 계산한다
+        double[] corrections = "MODIFIED_IDW".equals(m)
+                ? ModifiedIdwInterpolator.corrections(sources, p)
+                : null;
+
         List<IdwGridCell> cells = new ArrayList<>(n * n);
         for (int i = 0; i < n; i++) {
             double cellLat = minLat + (i + 0.5) * latSpan / n;
             for (int j = 0; j < n; j++) {
                 double cellLon = minLon + (j + 0.5) * lonSpan / n;
-                double pm25 = Math.round(
-                        IdwInterpolator.interpolate(sources, cellLat, cellLon, p) * 10.0) / 10.0;
+                double raw = corrections != null
+                        ? ModifiedIdwInterpolator.estimate(sources, corrections, cellLat, cellLon, p)
+                        : IdwInterpolator.interpolate(sources, cellLat, cellLon, p);
+                double pm25 = Math.round(raw * 10.0) / 10.0;
                 cells.add(new IdwGridCell(cellLat, cellLon, pm25, gradeProperties.gradeOf(pm25)));
             }
         }
 
-        return new IdwGridResponse(current.sido(), p, n, "AIRKOREA",
+        return new IdwGridResponse(current.sido(), p, n, m, "AIRKOREA",
                 current.mock(), current.stale(), sources.size(),
                 new IdwGridResponse.Bbox(minLat, minLon, maxLat, maxLon), cells);
+    }
+
+    private static String validateMethod(String method) {
+        if (method == null || method.isBlank()) {
+            return "IDW";
+        }
+        if (!method.equals("IDW") && !method.equals("MODIFIED_IDW")) {
+            throw new IllegalArgumentException("method는 IDW 또는 MODIFIED_IDW여야 합니다");
+        }
+        return method;
     }
 
     private static double validatePower(Double power) {

@@ -44,8 +44,10 @@ public class PredictionService {
                                   double temperature, double humidity, double windSpeed) {
         ObservationSite site = siteService.getSiteOrThrow(siteId);
 
+        // 관측소 위경도·현재 시각을 함께 전달한다 (태양고도 특징 모델용, 미사용 모델은 무시)
         AiServiceClient.PredictData result =
-                aiClient.predict(modelName, image, temperature, humidity, windSpeed);
+                aiClient.predict(modelName, image, temperature, humidity, windSpeed,
+                        site.getLatitude(), site.getLongitude(), Instant.now());
 
         AiModel model = aiModelRepository
                 .findByModelNameAndVersion(modelName, DEFAULT_MODEL_VERSION)

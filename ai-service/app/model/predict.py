@@ -1,13 +1,16 @@
 """저장된 모델 로드와 추론."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import torch
 from PIL import Image
 
+from app.common.solar import solar_elevation_deg
 from app.data.dataset import EnvScaler
+from app.data.schema import SOLAR_FEATURE_COLUMN
 from app.model.grades import GradeScale, load_grade_scale
 from app.model.network import MultimodalPm25Net
 from app.preprocessing.image_ops import (
@@ -25,10 +28,13 @@ class Predictor:
     def __init__(self, model: MultimodalPm25Net, scaler: EnvScaler,
                  config: dict, scale: GradeScale):
         self.model = model
-        self.scaler_mean = scaler.mean
-        self.scaler_std = scaler.std
+        self.scaler = scaler
         self.config = config
         self.scale = scale
+
+    @property
+    def uses_solar_altitude(self) -> bool:
+        return SOLAR_FEATURE_COLUMN in self.scaler.columns
 
     @classmethod
     def load(cls, model_dir: str | Path,
@@ -37,20 +43,39 @@ class Predictor:
         if not (model_dir / "model.pt").exists():
             raise FileNotFoundError(f"모델 파일이 없습니다: {model_dir / 'model.pt'}")
         config = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
-        model = MultimodalPm25Net(pretrained=False)
+        scaler = EnvScaler.load(model_dir / "scaler.json")
+        model = MultimodalPm25Net(pretrained=False, env_dim=len(scaler.columns))
         model.load_state_dict(torch.load(model_dir / "model.pt",
                                          map_location="cpu", weights_only=True))
         model.eval()
-        scaler = EnvScaler.load(model_dir / "scaler.json")
         return cls(model, scaler, config, load_grade_scale(grades_config_path))
 
     @torch.no_grad()
     def predict(self, image: Image.Image, temperature: float,
-                humidity: float, wind_speed: float) -> dict:
-        """PIL 이미지 + 환경값 → {"pm25": float, "grade": str}."""
+                humidity: float, wind_speed: float,
+                latitude: float | None = None,
+                longitude: float | None = None,
+                captured_at: datetime | None = None) -> dict:
+        """PIL 이미지 + 환경값 → {"pm25": float, "grade": str}.
+
+        태양고도를 사용하는 모델은 latitude/longitude가 필수이며,
+        captured_at 생략 시 현재 시각(UTC)으로 계산한다.
+        """
         array = self._preprocess(image)
-        env_raw = np.array([temperature, humidity, wind_speed], dtype=np.float64)
-        env = ((env_raw - self.scaler_mean) / self.scaler_std).astype(np.float32)
+        values = {
+            "temperature": temperature,
+            "humidity": humidity,
+            "wind_speed": wind_speed,
+        }
+        if self.uses_solar_altitude:
+            if latitude is None or longitude is None:
+                raise ValueError(
+                    "이 모델은 태양고도 입력을 사용합니다: latitude/longitude를 함께 보내세요")
+            when = captured_at or datetime.now(timezone.utc)
+            values[SOLAR_FEATURE_COLUMN] = solar_elevation_deg(latitude, longitude, when)
+
+        env_raw = np.array([values[c] for c in self.scaler.columns], dtype=np.float64)
+        env = ((env_raw - self.scaler.mean) / self.scaler.std).astype(np.float32)
 
         output = self.model(
             torch.from_numpy(array).unsqueeze(0),
