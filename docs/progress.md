@@ -36,6 +36,7 @@
 | 24 | 듀얼맵 비교 메뉴 제거(사용자 결정) | VERIFIED | /dual-map 라우트·메뉴·initialDual prop 되돌림(지도 내 듀얼맵 토글은 유지). 테스트·빌드 통과(2026-07-22) |
 | 25 | 대시보드 지역 선택(인천 전역·핵심 3구 필터) | VERIFIED | district 컬럼(V5)·요약/시간별/예측 구 필터·RegionSelector. 백엔드 신규 9건, 프론트 41건, 실 DB·Playwright 검증(2026-07-22) |
 | 26 | 관측값 CSV 일괄 업로드(MVP 잔여 필수 항목) | VERIFIED | Phase 2 보류 항목 구현. 부분 성공 정책(유효 저장·중복 건너뜀·행별 오류 보고). 백엔드 신규 11건, 실 DB·UI 검증(2026-07-22) |
+| 27 | 악취 모니터링(인천환경공단 OpenAPI) | VERIFIED | 가좌·승기·송도 사업소 복합악취 측정 연동(odcloud, Mock 자동). 지도 악취 레이어+공공 대기질 표. 백엔드 신규 10건, Mock 실기동·Playwright 검증(2026-07-22). 실키 검증은 활용신청 후 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -956,3 +957,62 @@ wind_direction)를 그대로 사용한다.
 - 프론트: `api/client.ts`(CsvUploadResult 타입), `pages/DataEntryPage.tsx`(CSV 카드)
 - 문서: `docs/api-spec.md`(관측값 표), `docs/user-guide.html`(§ 데이터 등록·이력 v1.15),
   `docs/progress.md`(본 절·Phase 2 항목·요약 표 25/26행 — 25행은 이전 세션 누락 보완)
+
+## Phase 27. 악취 모니터링 (인천환경공단 OpenAPI) — VERIFIED (2026-07-22)
+
+사용자 요청("사용가능한 OpenAPI를 사용하여 악취 모니터링 기능 추가")에 따라 구현했다.
+
+### 데이터 소스 조사 결과 (구현 전 확정)
+
+- 한국환경공단 "행정지역별 악취측정 데이터 확인 서비스"(15125001,
+  `apis.data.go.kr/B552584/kecoapi/TpYnEmaService/getBsmDataTpYn`)는 응답이 **측정유무(Y/N)
+  1개 필드뿐**이라 모니터링 시각화에 부적합 → 채택하지 않음 (Swagger 실명세로 확인)
+- **채택**: 인천환경공단 악취 측정 데이터 3종 — 가좌(15105070)·승기(15105071)·송도(15105073)
+  사업소. 공공데이터포털 **파일데이터 자동변환 OpenAPI(odcloud)** 로 제공되며 측정지점·주소·
+  위경도·측정일자·복합악취 희석배수를 포함. 승기(연수구 동춘동)·송도(연수구 송도동)는
+  핵심 3구 타겟 지역과 일치. 제약: 연 1회 개방 자료(실시간 아님) — UI에 명시
+- 실키 호출은 401 확인(각 데이터셋 활용신청 필요) → 기존 공공데이터 패턴대로 Mock 자동 폴백
+
+### 구현 내용
+
+- [x] 백엔드 `publicdata.odor` 슬라이스: `OdorProperties`(사업소별 데이터셋 설정,
+      application.yml에 3종 등록), `OdorClient`(odcloud GET, 1회 재시도, 401 안내 메시지,
+      키 비로깅, Mock fixture 3종), `OdorNormalizer`(**키워드 기반 컬럼 해석** —
+      데이터셋마다 "좌표_위도_Y축"/"위도"/"좌표(Y)" 등으로 컬럼명이 달라 키워드 매칭,
+      한국 좌표 범위 검증, "15배"·"1,234" 등 문자열 숫자 허용), `OdorService`
+      (사업소별 24h TtlCache, 사업소 단위 장애 격리 failedOffices, (사업소, 지점) 단위
+      최신값·최대값·측정수 집계), `GET /api/odor/measurements`
+- [x] 등급 기준: 악취방지법 시행규칙 별표 3 부지경계 배출허용기준(기타 15배·공업 20배) 근거
+      `config/odorGrades.ts` — 양호 ≤10 / 관심 ≤15 / 주의 ≤20 / 기준 초과 >20
+- [x] 3D 지도 "악취 측정(인천)" 레이어: 등급색 포인트 + "👃 지점명 N배" 라벨(80km 이내 표시),
+      InfoBox(사업소·주소·최근/최대값·측정수·법정 기준·출처·Mock 표시), 레이어 토글 기본 켜짐
+- [x] 공공 대기질 페이지 "악취 측정 현황 (인천)" 표: 사업소·지점·주소·최근 측정일·희석배수·
+      등급 배지·최대/측정수, Mock·stale·사업소 실패 배지, 좌표 없는 지점 "(좌표 없음)" 표기
+- [x] `.env.example`에 ODOR_SERVICE_KEY 안내(활용신청 필요 데이터셋 명시)
+
+### 테스트·검증 결과
+
+- 백엔드 `gradlew test` BUILD SUCCESSFUL — 신규 10건(`OdorNormalizerTest` 5:
+  컬럼 변형·문자열 숫자·좌표 범위·빈 행·콤마 숫자 / `OdorServiceTest` 4: 지점 집계·
+  장애 격리·주소 대체 지점명·사업소별 캐시 / `OdorControllerTest` 1)
+- 프론트 tsc·oxlint·Vitest **43건**(신규 odorGrades 2건)·빌드 통과
+- Mock 실기동 검증: `GET /api/odor/measurements` → mock=true, **13개 지점** 집계
+  (예: 건지사거리 최신 3.0·최대 4.2·2회, 아암물류단지 좌표 없음 → locationAvailable=false),
+  사업소 내 희석배수 내림차순 정렬 확인
+- Playwright 화면 검증: 3D 지도에 악취 레이어 체크박스+갈색 마커·값 라벨 렌더
+  (승기천 하류 16.2배 등, 위성 배경에서 확인), 공공 대기질 페이지 표 13행·등급 배지
+  (기준 초과/주의/관심/양호)·Mock 배지·기준 안내 문구 렌더. 앱 콘솔 에러 0건
+- **실키 검증 미완**: 공공데이터포털에서 데이터셋 3종 활용신청 후 `.env`에
+  `ODOR_SERVICE_KEY` 입력 시 실 데이터로 자동 전환(Mock과 동일 파싱 경로)
+
+### 변경 파일
+
+- 백엔드 신규: `publicdata/OdorProperties.java`, `publicdata/odor/{OdorClient,OdorNormalizer,
+  OdorService,OdorController,OdorRaw}.java`, `publicdata/odor/dto/{OdorMeasurement,
+  OdorSpotResponse,OdorResponse}.java`, `resources/fixtures/odor/raw/{gajwa,seunggi,songdo}.json`,
+  테스트 3종. 수정: `application.yml`(airvision.odor), `.env.example`
+- 프론트 신규: `config/odorGrades.ts`(+테스트). 수정: `api/client.ts`(OdorSpot/OdorResponse),
+  `config/mapConfig.ts`(odor 색), `pages/MapPage.tsx`(odor 레이어·addOdorSpot·loadOdor),
+  `pages/PublicAirPage.tsx`(악취 표)
+- 문서: `docs/api-spec.md`(악취 절), `docs/user-guide.html`(§7·공공 대기질·이력 v1.16),
+  `docs/progress.md`(본 절)

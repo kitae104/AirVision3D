@@ -59,6 +59,11 @@
 | GET | /api/viz/observations/time-range | 관측 데이터 존재 범위 {from, to} |
 | GET | /api/viz/observations/series?from&to | 관측소별 PM2.5 시계열 (최대 7일) |
 
+### 악취 모니터링
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | /api/odor/measurements | 인천환경공단 사업소(가좌·승기·송도) 주변 복합악취 희석배수 측정 현황. 측정지점 단위 집계 {mock, stale, loadedAt, spotCount, spots[{office, spotName, address, latitude, longitude, locationAvailable, latestDate, latestDilution, maxDilution, measurementCount}], failedOffices}. 공공데이터포털 odcloud 자동변환 API(연 단위 개방), 키 미설정 시 Mock. 공공 대기질 API 명세는 docs/public-data-api-integration.md 참조 |
+
 ### 기타
 | 메서드 | 경로 | 설명 |
 |---|---|---|

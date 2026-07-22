@@ -33,6 +33,7 @@ export const MAP_CONFIG = {
     airkorea: '#0ea5e9',
     idwSurface: '#14b8a6',
     alertRegion: '#dc2626',
+    odor: '#a16207',
   },
 
   /** 경보 발령 시도 강조 (반투명 원) */

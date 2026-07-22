@@ -57,6 +57,24 @@ airvision:
   kma:
     service-key: ${KMA_SERVICE_KEY:}
     base-url: ${KMA_BASE_URL:https://apis.data.go.kr/1360000}
+  # 인천환경공단 악취 측정 데이터 (공공데이터포털 파일데이터 자동변환 OpenAPI, 연 1회 개방)
+  # 키가 없으면 public-data.mock-enabled=auto에 의해 Mock 데이터로 동작.
+  # 실키 사용 시 각 데이터셋(15105070/15105071/15105073)의 활용신청이 필요하다.
+  odor:
+    service-key: ${ODOR_SERVICE_KEY:}
+    base-url: ${ODOR_BASE_URL:https://api.odcloud.kr/api}
+    cache-seconds: 86400
+    per-page: 500
+    datasets:
+      - office: 가좌사업소
+        path: /15105070/v1/uddi:76eeccb4-f548-4c88-afd1-b5e61d00f080
+        fixture: gajwa.json
+      - office: 승기사업소
+        path: /15105071/v1/uddi:b6e2bbcc-09c1-4053-a7fc-80af720bc53c
+        fixture: seunggi.json
+      - office: 송도사업소
+        path: /15105073/v1/uddi:21a67adc-88aa-430e-af34-f89cbf921a18
+        fixture: songdo.json
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     expiration-hours: 12

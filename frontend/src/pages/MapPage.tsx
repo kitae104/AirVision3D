@@ -3,10 +3,11 @@ import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import type {
-  AirAlert, ApiResponse, CurrentAirQuality, IdwGridResponse, InterpolationResult, PageResponse,
-  PollutantValue, Prediction, PublicStationAir, Site, WeatherNow,
+  AirAlert, ApiResponse, CurrentAirQuality, IdwGridResponse, InterpolationResult, OdorResponse,
+  OdorSpot, PageResponse, PollutantValue, Prediction, PublicStationAir, Site, WeatherNow,
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
+import { odorGradeOf } from '../config/odorGrades'
 import { MAP_CONFIG } from '../config/mapConfig'
 import {
   DISTRICT_VIEW_HEIGHT, INCHEON_CORE_DISTRICTS, INCHEON_FOCUS_VIEW,
@@ -53,6 +54,7 @@ interface PublicSeriesStation {
 
 type LayerKey =
   | 'observation' | 'prediction' | 'interpolation' | 'airkorea' | 'idwSurface' | 'alertRegion'
+  | 'odor'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
   observation: '관측값',
@@ -61,6 +63,7 @@ const LAYER_LABELS: Record<LayerKey, string> = {
   airkorea: '공공 대기질',
   idwSurface: '실측 IDW 표면',
   alertRegion: '경보 권역',
+  odor: '악취 측정(인천)',
 }
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
@@ -410,6 +413,52 @@ function addAlertRegion(ds: Cesium.CustomDataSource, summary: DistrictAlertSumma
 }
 
 /**
+ * 악취 측정지점 마커: 등급색 포인트 + "지점명 N배" 라벨.
+ * 자료는 인천환경공단 사업소 주변 복합악취(희석배수) 측정으로, 연 단위 개방(실시간 아님).
+ */
+function addOdorSpot(ds: Cesium.CustomDataSource, spot: OdorSpot, mock: boolean) {
+  if (!spot.locationAvailable || spot.latitude == null || spot.longitude == null) return
+  const dilution = spot.latestDilution
+  const grade = dilution != null ? odorGradeOf(dilution) : null
+  const color = grade
+    ? Cesium.Color.fromCssColorString(grade.chart)
+    : Cesium.Color.fromCssColorString('#9ca3af')
+  const valueText = dilution != null ? `${dilution}배` : '값 없음'
+  const description = `
+    <table class="cesium-infoBox-defaultTable"><tbody>
+      <tr><th>구분</th><td>악취 측정 (복합악취 희석배수)${mock ? ' · Mock 데이터' : ''}</td></tr>
+      <tr><th>관할 사업소</th><td>${spot.office}</td></tr>
+      <tr><th>주소</th><td>${spot.address ?? '-'}</td></tr>
+      <tr><th>최근 측정</th><td>${spot.latestDate ?? '-'} · <b>${valueText}</b>${grade ? ` (${grade.name})` : ''}</td></tr>
+      <tr><th>최대값 / 측정 수</th><td>${spot.maxDilution ?? '-'}배 / ${spot.measurementCount}회</td></tr>
+      <tr><th>기준</th><td>악취방지법 부지경계 배출허용기준: 기타 지역 15배, 공업 지역 20배</td></tr>
+      <tr><th>출처</th><td>인천환경공단 (공공데이터포털, 연 단위 개방 자료)</td></tr>
+    </tbody></table>`
+  ds.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(spot.longitude, spot.latitude, 20),
+    point: {
+      pixelSize: 12,
+      color: color.withAlpha(0.9),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+    },
+    label: {
+      text: `👃 ${spot.spotName} ${valueText}`,
+      font: '12px sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      pixelOffset: new Cesium.Cartesian2(0, -14),
+      distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 80_000),
+    },
+    name: `${spot.spotName} (악취)`,
+    description,
+  })
+}
+
+/**
  * 공공 측정소 1곳의 누적 시계열을 색이 변하는 원기둥 + 라벨로 표시.
  * 농도는 색(등급)으로 표현하며, 데이터 없는 시간은 availability로 숨긴다.
  */
@@ -525,6 +574,7 @@ export default function MapPage() {
     airkorea: true,
     idwSurface: false,
     alertRegion: true,
+    odor: true,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
   const [dualMode, setDualMode] = useState(false)
@@ -585,6 +635,22 @@ export default function MapPage() {
       }
     } catch {
       ds.alertRegion.entities.removeAll()
+    }
+  }
+
+  /** 악취 측정 현황 로드 → 측정지점 마커 (실패해도 다른 레이어 무영향) */
+  const loadOdor = async () => {
+    const ds = dataSourcesRef.current
+    if (!ds) return
+    try {
+      const res = await apiClient.get<ApiResponse<OdorResponse>>('/odor/measurements')
+      if (dataSourcesRef.current !== ds) return // 응답 대기 중 재마운트 시 중단
+      ds.odor.entities.removeAll()
+      for (const spot of res.data.data.spots) {
+        addOdorSpot(ds.odor, spot, res.data.data.mock)
+      }
+    } catch {
+      ds.odor.entities.removeAll()
     }
   }
 
@@ -790,6 +856,7 @@ export default function MapPage() {
       airkorea: new Cesium.CustomDataSource('airkorea'),
       idwSurface: new Cesium.CustomDataSource('idwSurface'),
       alertRegion: new Cesium.CustomDataSource('alertRegion'),
+      odor: new Cesium.CustomDataSource('odor'),
     }
     Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
@@ -825,6 +892,7 @@ export default function MapPage() {
     loadCurrent()
     loadPublicAir()
     loadAlerts()
+    loadOdor()
 
     return () => {
       viewer.destroy()

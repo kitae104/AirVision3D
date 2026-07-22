@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import type {
-  AirAlert, AirForecastEnvelope, ApiResponse, ComparisonResult, WeeklyForecast,
+  AirAlert, AirForecastEnvelope, ApiResponse, ComparisonResult, OdorResponse, WeeklyForecast,
 } from '../api/client'
 import { PUBLIC_GRADE_COLORS } from '../config/publicGrades'
+import { odorGradeOf } from '../config/odorGrades'
 
 const INFORM_CODES = [
   { code: 'PM25', label: '초미세먼지 PM2.5' },
@@ -52,6 +53,7 @@ export default function PublicAirPage() {
   const [weekly, setWeekly] = useState<WeeklyForecast | null>(null)
   const [alerts, setAlerts] = useState<AirAlert[]>([])
   const [comparison, setComparison] = useState<ComparisonResult | null>(null)
+  const [odor, setOdor] = useState<OdorResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -65,12 +67,15 @@ export default function PublicAirPage() {
       apiClient.get<ApiResponse<AirAlert[]>>('/air-quality/alerts'),
       apiClient.get<ApiResponse<ComparisonResult>>('/air-quality/comparison/latest')
         .catch(() => null),
+      apiClient.get<ApiResponse<OdorResponse>>('/odor/measurements')
+        .catch(() => null),
     ])
-      .then(([forecastRes, weeklyRes, alertsRes, comparisonRes]) => {
+      .then(([forecastRes, weeklyRes, alertsRes, comparisonRes, odorRes]) => {
         setForecast(forecastRes.data.data)
         setWeekly(weeklyRes.data.data)
         setAlerts(alertsRes.data.data)
         setComparison(comparisonRes?.data.data ?? null)
+        setOdor(odorRes?.data.data ?? null)
       })
       .catch((err) => setError(errorMessage(err)))
       .finally(() => setLoading(false))
@@ -239,6 +244,85 @@ export default function PublicAirPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      {/* 악취 측정 현황 (인천환경공단) */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-semibold text-gray-900">악취 측정 현황 (인천)</h3>
+          <span className="text-xs text-gray-500">
+            인천환경공단 사업소 주변 복합악취 희석배수 · 연 단위 개방 자료 (실시간 아님)
+          </span>
+          {odor?.mock && (
+            <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-800">
+              Mock 데이터
+            </span>
+          )}
+          {odor?.stale && (
+            <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-800">
+              외부 API 연결 문제로 마지막 정상 데이터를 표시합니다
+            </span>
+          )}
+        </div>
+        {odor && odor.failedOffices.length > 0 && (
+          <p className="mt-2 rounded bg-orange-50 px-3 py-1.5 text-xs text-orange-700">
+            일부 사업소 조회 실패: {odor.failedOffices.join(', ')}
+          </p>
+        )}
+        {!odor || odor.spots.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-400">악취 측정 데이터가 없습니다</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-gray-500">
+                <tr>
+                  <th className="px-3 py-2">관할 사업소</th>
+                  <th className="px-3 py-2">측정지점</th>
+                  <th className="px-3 py-2">주소</th>
+                  <th className="px-3 py-2">최근 측정일</th>
+                  <th className="px-3 py-2">희석배수</th>
+                  <th className="px-3 py-2">등급</th>
+                  <th className="px-3 py-2">최대 / 측정 수</th>
+                </tr>
+              </thead>
+              <tbody>
+                {odor.spots.map((s, i) => {
+                  const grade = s.latestDilution != null ? odorGradeOf(s.latestDilution) : null
+                  return (
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="px-3 py-2">{s.office}</td>
+                      <td className="px-3 py-2">
+                        {s.spotName}
+                        {!s.locationAvailable && (
+                          <span className="ml-1 text-[11px] text-gray-400">(좌표 없음)</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{s.address ?? '-'}</td>
+                      <td className="px-3 py-2 text-xs">{s.latestDate ?? '-'}</td>
+                      <td className="px-3 py-2 font-medium">
+                        {s.latestDilution != null ? `${s.latestDilution}배` : '-'}
+                      </td>
+                      <td className="px-3 py-2">
+                        {grade ? (
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${grade.badge}`}>
+                            {grade.name}
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {s.maxDilution != null ? `${s.maxDilution}배` : '-'} / {s.measurementCount}회
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <p className="mt-2 text-xs text-gray-400">
+              등급 기준: 악취방지법 부지경계 배출허용기준(기타 지역 15배, 공업 지역 20배) 참고.
+              좌표가 있는 지점은 3D 지도의 "악취 측정(인천)" 레이어에도 표시됩니다.
+            </p>
           </div>
         )}
       </section>

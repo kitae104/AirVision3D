@@ -42,6 +42,28 @@ export interface Observation {
   windDirection: number | null
 }
 
+export interface OdorSpot {
+  office: string
+  spotName: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  locationAvailable: boolean
+  latestDate: string | null
+  latestDilution: number | null
+  maxDilution: number | null
+  measurementCount: number
+}
+
+export interface OdorResponse {
+  mock: boolean
+  stale: boolean
+  loadedAt: string | null
+  spotCount: number
+  spots: OdorSpot[]
+  failedOffices: string[]
+}
+
 export interface CsvUploadResult {
   totalRows: number
   inserted: number
