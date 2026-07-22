@@ -115,6 +115,11 @@ public interface ObservationRepository
         return findLatestPm25PerSite(at, null);
     }
 
+    /** 후보 시각 중 이미 저장된 관측 시각 (CSV 업로드의 중복 확인용, 관측소 단위 일괄 조회). */
+    @Query("SELECT o.observedAt FROM Observation o WHERE o.site.id = :siteId AND o.observedAt IN :times")
+    List<Instant> findExistingObservedAt(@Param("siteId") Long siteId,
+                                         @Param("times") java.util.Collection<Instant> times);
+
     /** 관측소/기간 조건을 조합한 검색 조건 (null 파라미터는 조건에서 제외). */
     static Specification<Observation> search(Long siteId, Instant from, Instant to) {
         return (root, query, cb) -> {

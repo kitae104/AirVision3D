@@ -34,6 +34,8 @@
 | 22 | 거리 측정 중 InfoBox 억제(Phase 20 제약 해소) | VERIFIED | 측정 중 뷰어 기본 클릭(엔티티 선택·더블클릭 추적) 제거→종료 시 복원. Playwright로 억제·복원 실검증(2026-07-22) |
 | 23 | ion 토큰 env 적용 수정 + 듀얼맵 비교 전용 페이지 | VERIFIED | vite envDir 루트 지정으로 루트 .env 토큰 실적용, 위성 시작·[위성/일반] 전환 실검증. /dual-map 메뉴 신설(두 지도 상태로 시작). 프론트 38건 통과(2026-07-22) |
 | 24 | 듀얼맵 비교 메뉴 제거(사용자 결정) | VERIFIED | /dual-map 라우트·메뉴·initialDual prop 되돌림(지도 내 듀얼맵 토글은 유지). 테스트·빌드 통과(2026-07-22) |
+| 25 | 대시보드 지역 선택(인천 전역·핵심 3구 필터) | VERIFIED | district 컬럼(V5)·요약/시간별/예측 구 필터·RegionSelector. 백엔드 신규 9건, 프론트 41건, 실 DB·Playwright 검증(2026-07-22) |
+| 26 | 관측값 CSV 일괄 업로드(MVP 잔여 필수 항목) | VERIFIED | Phase 2 보류 항목 구현. 부분 성공 정책(유효 저장·중복 건너뜀·행별 오류 보고). 백엔드 신규 11건, 실 DB·UI 검증(2026-07-22) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -88,9 +90,9 @@
       ④ 관측소 등록→수정→삭제→404 왕복, 관측값 등록·필터 조회(샘플 1,184건) 확인
       ⑤ 잘못된 위도 입력 → 400, Swagger UI → 200
 - [ ] 사용자 인증(JWT) — 후속 진행 (로그인 화면과 함께 Phase 6 전후 예정)
-- [ ] CSV 업로드 — **사용자 결정으로 보류(2026-07-17)**: 업로드할 실측 CSV가 아직 없음.
-      실측 데이터(예: 에어코리아) 확보 시 진행. 스키마: site_id, observed_at, pm10, pm25,
-      temperature, humidity, wind_speed, wind_direction
+- [x] CSV 업로드 — ~~사용자 결정으로 보류(2026-07-17)~~ → **완료(2026-07-22, Phase 26)**:
+      스키마 site_id, observed_at, pm10, pm25, temperature, humidity, wind_speed,
+      wind_direction 그대로 구현 (아래 Phase 26 참조)
 
 ### 참고
 
@@ -264,8 +266,8 @@
 ### 잔여 항목 (사용자 확인 후 처리)
 
 - ~~Phase 6~8 브라우저 육안 확인~~ → **완료(2026-07-22, Phase 16)**: 전 Phase VERIFIED 승격
-- 보류/선택: CSV 업로드(실측 데이터 확보 시), Modified IDW, EfficientNet 비교,
-  웹 ROI, CZML, 듀얼맵, 화면 캡처, 7x7x3 격자, ~~프론트 컴포넌트 테스트~~(Phase 14 완료)
+- 보류/선택: ~~CSV 업로드~~(Phase 26 완료), ~~Modified IDW~~·~~듀얼맵~~·~~화면 캡처~~(Phase 20 완료),
+  EfficientNet 비교, 웹 ROI, CZML, 7x7x3 격자, ~~프론트 컴포넌트 테스트~~(Phase 14 완료)
 
 ## 확인 대기 사항 (BLOCKED 아님, 기본 가정으로 진행 가능)
 
@@ -910,3 +912,47 @@ Phase 23의 ② 항목만 되돌렸다(① ion 토큰 envDir 수정은 유지).
   `frontend/src/components/RegionSelector.tsx`(신규)·`RegionSelector.test.tsx`(신규),
   `frontend/src/api/client.ts`, `frontend/src/pages/DashboardPage.tsx`,
   `docs/user-guide.html`(§ 대시보드·이력 v1.14), `docs/progress.md`(본 절)
+
+## Phase 26. 관측값 CSV 일괄 업로드 — VERIFIED (2026-07-22)
+
+MVP 필수 범위 중 마지막까지 남아 있던 항목(Phase 2에서 "실측 CSV 미확보"로 보류)을 구현했다.
+계획서의 스키마(site_id, observed_at, pm10, pm25, temperature, humidity, wind_speed,
+wind_direction)를 그대로 사용한다.
+
+### 구현 내용
+
+- [x] 백엔드 `POST /api/observations/csv` (multipart `file`, ADMIN 전용 — 기존 쓰기 권한 규칙):
+      `ObservationCsvService` 신설. 헤더 필수 site_id·observed_at, 나머지 6컬럼 선택·순서 자유,
+      허용 외 컬럼/필수 컬럼 누락/헤더만 있는 파일/10,000행 초과는 400
+- [x] 부분 성공 정책: 유효 행 저장, (관측소, 시각) 중복은 파일 내·DB 모두 건너뜀
+      (기존 유일성 제약과 동일 기준, 관측소 단위 일괄 조회로 확인), 오류 행은 행 번호+사유 보고
+      (errors 최대 20건, failed는 전체 수). 응답 {totalRows, inserted, duplicateSkipped, failed, errors}
+- [x] 시각 파싱 3형식: ISO-8601 오프셋 포함 → 타임존 없는 ISO(KST 해석) →
+      "yyyy-MM-dd HH:mm"(KST, 기존 `KstTimes` 재사용·24:00 허용). 값 검증은 기존
+      `ObservationRequest` Bean Validation을 프로그래매틱 Validator로 재사용(단일 규칙 소스)
+- [x] 프론트: 데이터 등록 화면에 "관측값 CSV 일괄 업로드" 카드(파일 선택→업로드→
+      총/등록/중복/실패 요약과 행별 오류 목록 표시), "제공 예정" 안내 문구 제거
+- [x] BOM·둘러싼 따옴표·빈 줄 처리, UTF-8 고정
+
+### 테스트·검증 결과
+
+- 백엔드 `gradlew test` BUILD SUCCESSFUL — 신규 11건
+  (`ObservationCsvServiceTest` 9건: KST 변환·컬럼 순서 자유·파일내/DB 중복·미존재 관측소·
+  값 4종 오류 행번호·헤더 오류·BOM / `ObservationControllerTest` 2건: 요약 응답·400)
+- 프론트 tsc·oxlint·Vitest 41건·`npm run build` 통과
+- 실 DB 실기동 검증: 6행 테스트 CSV → 1차 {inserted 3, duplicateSkipped 1(파일 내 중복),
+  failed 2(관측소 999, pm25 음수 — 행번호·사유 포함)}, 2차 재업로드 → {inserted 0,
+  duplicateSkipped 4} (멱등). "2031-01-01 11:00"(KST) → 02:00Z 저장 확인,
+  잘못된 헤더 → 400 + 안내. 검증 후 테스트 행 3건 삭제(정리)
+- Playwright UI 검증: 데이터 등록 화면 CSV 카드 렌더 → 파일 업로드 → "총 6행 · 등록 0 ·
+  중복 건너뜀 4 · 실패 2"와 행별 오류 2건 표시 확인. 콘솔 에러 0건
+
+### 변경 파일
+
+- 백엔드 신규: `observation/ObservationCsvService.java`, `observation/dto/CsvUploadResult.java`,
+  `observation/ObservationCsvServiceTest.java`
+- 백엔드 수정: `ObservationController.java`(/csv 엔드포인트), `ObservationRepository.java`
+  (findExistingObservedAt), `ObservationControllerTest.java`(mock·테스트 2건)
+- 프론트: `api/client.ts`(CsvUploadResult 타입), `pages/DataEntryPage.tsx`(CSV 카드)
+- 문서: `docs/api-spec.md`(관측값 표), `docs/user-guide.html`(§ 데이터 등록·이력 v1.15),
+  `docs/progress.md`(본 절·Phase 2 항목·요약 표 25/26행 — 25행은 이전 세션 누락 보완)

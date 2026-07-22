@@ -42,6 +42,14 @@ export interface Observation {
   windDirection: number | null
 }
 
+export interface CsvUploadResult {
+  totalRows: number
+  inserted: number
+  duplicateSkipped: number
+  failed: number
+  errors: { line: number; message: string }[]
+}
+
 export interface Prediction {
   id: number
   siteId: number

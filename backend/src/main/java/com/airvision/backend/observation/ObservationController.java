@@ -2,6 +2,7 @@ package com.airvision.backend.observation;
 
 import com.airvision.backend.common.ApiResponse;
 import com.airvision.backend.common.PageResponse;
+import com.airvision.backend.observation.dto.CsvUploadResult;
 import com.airvision.backend.observation.dto.ObservationRequest;
 import com.airvision.backend.observation.dto.ObservationResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,9 +28,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ObservationController {
 
     private final ObservationService observationService;
+    private final ObservationCsvService observationCsvService;
 
-    public ObservationController(ObservationService observationService) {
+    public ObservationController(ObservationService observationService,
+                                 ObservationCsvService observationCsvService) {
         this.observationService = observationService;
+        this.observationCsvService = observationCsvService;
     }
 
     @Operation(summary = "관측값 목록 조회 (관측소/기간 필터, 페이지네이션)")
@@ -54,6 +58,13 @@ public class ObservationController {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<ObservationResponse> create(@Valid @RequestBody ObservationRequest request) {
         return ApiResponse.ok(observationService.create(request));
+    }
+
+    @Operation(summary = "관측값 CSV 일괄 업로드 (헤더: site_id,observed_at[,pm10,pm25,temperature,humidity,wind_speed,wind_direction])")
+    @PostMapping(value = "/csv", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<CsvUploadResult> uploadCsv(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return ApiResponse.ok(observationCsvService.upload(file));
     }
 
     @Operation(summary = "관측값 수정")

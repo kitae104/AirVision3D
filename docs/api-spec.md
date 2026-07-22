@@ -32,6 +32,7 @@
 | GET | /api/observations?siteId&from&to&page&size | 목록 (필터·페이지네이션, 최신순) |
 | GET | /api/observations/{id} | 상세 |
 | POST | /api/observations | 등록 {siteId, observedAt, pm10?, pm25?, temperature?, humidity?, windSpeed?, windDirection?} |
+| POST | /api/observations/csv | CSV 일괄 업로드 (multipart `file`). 헤더 필수 site_id, observed_at · 선택 pm10, pm25, temperature, humidity, wind_speed, wind_direction. 시각은 ISO-8601 또는 타임존 없는 KST. (관측소, 시각) 중복은 건너뜀, 최대 10,000행. 응답 {totalRows, inserted, duplicateSkipped, failed, errors[{line, message}]} |
 | PUT | /api/observations/{id} | 수정 |
 | DELETE | /api/observations/{id} | 삭제 |
 

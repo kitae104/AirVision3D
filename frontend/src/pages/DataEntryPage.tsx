@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
-import type { ApiResponse, Site } from '../api/client'
+import type { ApiResponse, CsvUploadResult, Site } from '../api/client'
 
 const inputCls =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none'
@@ -76,11 +76,36 @@ export default function DataEntryPage() {
     }
   }
 
+  // --- CSV 일괄 업로드 ---
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [csvUploading, setCsvUploading] = useState(false)
+  const [csvResult, setCsvResult] = useState<CsvUploadResult | null>(null)
+  const [csvMsg, setCsvMsg] = useState<{ text: string; ok: boolean } | null>(null)
+
+  const submitCsv = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!csvFile) return
+    setCsvMsg(null)
+    setCsvResult(null)
+    setCsvUploading(true)
+    try {
+      const body = new FormData()
+      body.append('file', csvFile)
+      const res = await apiClient.post<ApiResponse<CsvUploadResult>>('/observations/csv', body)
+      setCsvResult(res.data.data)
+      setCsvMsg({ text: 'CSV 업로드 완료', ok: true })
+    } catch (err) {
+      setCsvMsg({ text: errorMessage(err), ok: false })
+    } finally {
+      setCsvUploading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-gray-900">데이터 등록</h2>
       <p className="text-sm text-gray-500">
-        CSV 일괄 업로드는 실측 데이터 확보 후 제공 예정입니다. 현재는 개별 등록을 지원합니다.
+        개별 등록 또는 CSV 일괄 업로드(아래)로 관측값을 등록할 수 있습니다.
       </p>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -168,6 +193,55 @@ export default function DataEntryPage() {
           </button>
         </form>
       </div>
+
+      <form onSubmit={submitCsv} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <h3 className="font-semibold text-gray-900">관측값 CSV 일괄 업로드</h3>
+        <p className="text-sm text-gray-500">
+          헤더 필수 컬럼: <code className="rounded bg-gray-100 px-1">site_id</code>,{' '}
+          <code className="rounded bg-gray-100 px-1">observed_at</code> · 선택 컬럼:{' '}
+          <code className="rounded bg-gray-100 px-1">pm10, pm25, temperature, humidity, wind_speed, wind_direction</code>
+          <br />
+          시각은 ISO-8601(예: 2026-07-22T10:00:00Z) 또는 타임존 없는 한국 시각(예: 2026-07-22 10:00)을
+          지원합니다. 같은 관측소·시각의 기존 데이터는 건너뜁니다(최대 10,000행).
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+            className="text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+          />
+          <button
+            type="submit"
+            disabled={!csvFile || csvUploading}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            {csvUploading ? '업로드 중…' : 'CSV 업로드'}
+          </button>
+        </div>
+        {csvMsg && <Message {...csvMsg} />}
+        {csvResult && (
+          <div className="space-y-2 rounded-md bg-gray-50 p-3 text-sm text-gray-700">
+            <p>
+              총 <b>{csvResult.totalRows}</b>행 · 등록 <b className="text-green-700">{csvResult.inserted}</b> ·
+              중복 건너뜀 <b>{csvResult.duplicateSkipped}</b> ·
+              실패 <b className={csvResult.failed > 0 ? 'text-red-700' : ''}>{csvResult.failed}</b>
+            </p>
+            {csvResult.errors.length > 0 && (
+              <ul className="list-inside list-disc text-red-700">
+                {csvResult.errors.map((err) => (
+                  <li key={`${err.line}-${err.message}`}>
+                    {err.line}행: {err.message}
+                  </li>
+                ))}
+                {csvResult.failed > csvResult.errors.length && (
+                  <li>… 외 {csvResult.failed - csvResult.errors.length}건 (상위 20건만 표시)</li>
+                )}
+              </ul>
+            )}
+          </div>
+        )}
+      </form>
     </div>
   )
 }

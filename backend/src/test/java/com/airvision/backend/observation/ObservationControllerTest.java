@@ -32,6 +32,9 @@ class ObservationControllerTest {
     @MockitoBean
     private ObservationService observationService;
 
+    @MockitoBean
+    private ObservationCsvService observationCsvService;
+
     private ObservationResponse sampleObservation() {
         return new ObservationResponse(1L, 1L, "서울시청",
                 Instant.parse("2026-07-17T09:00:00Z"),
@@ -64,6 +67,35 @@ class ObservationControllerTest {
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.siteName").value("서울시청"));
+    }
+
+    @Test
+    void uploadCsv_returnsSummary() throws Exception {
+        when(observationCsvService.upload(any())).thenReturn(
+                new com.airvision.backend.observation.dto.CsvUploadResult(3, 2, 1, 0, List.of()));
+
+        var file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "obs.csv", "text/csv",
+                "site_id,observed_at,pm25\n1,2026-07-22T01:00:00Z,10\n".getBytes());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/observations/csv").file(file))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalRows").value(3))
+                .andExpect(jsonPath("$.data.inserted").value(2))
+                .andExpect(jsonPath("$.data.duplicateSkipped").value(1));
+    }
+
+    @Test
+    void uploadCsv_invalidCsv_returns400() throws Exception {
+        when(observationCsvService.upload(any()))
+                .thenThrow(new IllegalArgumentException("CSV 헤더에 site_id, observed_at 컬럼이 필요합니다"));
+
+        var file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "obs.csv", "text/csv", "bad".getBytes());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/observations/csv").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test
