@@ -873,3 +873,40 @@ Phase 23의 ② 항목만 되돌렸다(① ion 토큰 envDir 수정은 유지).
 - `frontend/src/App.tsx`, `frontend/src/components/Layout.tsx`,
   `frontend/src/pages/MapPage.tsx`, `docs/user-guide.html`(§7·이력 v1.13),
   `docs/progress.md`(본 절)
+
+## Phase 25. 대시보드 지역 선택 (인천 전역·핵심 3구 필터) — VERIFIED (2026-07-22)
+
+사용자 요청: 대시보드가 어느 지역 기준인지 불명확 → 지역(인천 전역 또는
+미추홀·남동·연수구)을 선택해 대시보드 내용을 확인할 수 있도록 개선.
+설계: `docs/superpowers/specs/2026-07-22-dashboard-region-filter-design.md`,
+계획: `docs/superpowers/plans/2026-07-22-dashboard-region-filter.md`
+
+- [x] DB: Flyway `V5__site_district.sql` — `observation_sites.district VARCHAR(30)` 추가,
+      핵심 3구 시드 6곳 + V2 인천송도(연수구)에 구 값 채움 (그 외 NULL → 필터 제외)
+- [x] 백엔드: `Districts`(허용 3구 검증, 그 외 400) 신설.
+      `GET /dashboard/summary`·`/dashboard/hourly`·`/predictions`에 선택적 `district`
+      파라미터 추가(미지정 시 기존과 동일). summary 응답에 `district` 키 추가.
+      보간(IDW) 건수는 전체 관측소 기반 표면이라 구 단위 분리 불가 → 항상 전체 기준
+- [x] 프론트: `RegionSelector` 세그먼트 버튼(인천 전역/미추홀구/남동구/연수구) 신설,
+      `DashboardPage`가 선택 구 기준으로 요약·시간별·예측 재조회, 제목에 "OO 기준" 표시.
+      공공 데이터 카드·추이는 시/도 단위 자료라 필터하지 않고
+      "인천 전역 (시/도 단위 자료)" 라벨 명시, 보간 카드는 구 선택 시 "전체 기준" 표시
+- [x] 테스트: 백엔드 Gradle 전체 통과(DashboardControllerTest 4·DistrictsTest 3·
+      PredictionControllerTest 2건 신규 포함), 프론트 tsc·빌드·Vitest 41건(신규 3) 통과
+- [x] 실검증: 백엔드 기동 → Flyway v5 적용 로그 확인. curl —
+      `summary?district=미추홀구` → siteCount 2·평균 38.3, 무파라미터 → siteCount 13·평균 22.8,
+      `hourly?district=연수구` → 14행, `district=강남구` → 400 + 허용 목록 메시지.
+      Playwright 화면 검증 — 버튼 4개 렌더, 미추홀구 클릭 시 카드·차트 갱신("미추홀구 기준"),
+      공공 카드 불변, 인천 전역 복귀 정상
+
+### 변경 파일
+
+- `backend/.../db/migration/V5__site_district.sql`(신규),
+  `backend/.../site/ObservationSite.java`·`dto/SiteResponse.java`·`ObservationSiteRepository.java`·
+  `Districts.java`(신규), `backend/.../observation/ObservationRepository.java`,
+  `backend/.../prediction/PredictionRepository.java`·`PredictionService.java`·`PredictionController.java`,
+  `backend/.../dashboard/DashboardService.java`·`DashboardController.java`,
+  테스트: `DashboardControllerTest`(신규)·`DistrictsTest`(신규)·`SiteControllerTest`·`PredictionControllerTest`,
+  `frontend/src/components/RegionSelector.tsx`(신규)·`RegionSelector.test.tsx`(신규),
+  `frontend/src/api/client.ts`, `frontend/src/pages/DashboardPage.tsx`,
+  `docs/user-guide.html`(§ 대시보드·이력 v1.14), `docs/progress.md`(본 절)
