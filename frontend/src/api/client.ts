@@ -25,6 +25,7 @@ export interface Site {
   altitude: number | null
   siteType: string
   description: string | null
+  district: string | null
   geomWkt: string | null
 }
 

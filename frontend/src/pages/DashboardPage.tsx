@@ -26,6 +26,7 @@ import type {
 } from '../api/client'
 import { gradeStyle } from '../config/grades'
 import { PUBLIC_GRADE_COLORS } from '../config/publicGrades'
+import RegionSelector from '../components/RegionSelector'
 
 interface HourlyPoint {
   time: string
@@ -70,6 +71,7 @@ export default function DashboardPage() {
   const [errorHistory, setErrorHistory] =
     useState<{ time: string; error: number | null }[]>([])
   const [accumulated, setAccumulated] = useState<number | null>(null)
+  const [district, setDistrict] = useState<string | null>(null)
 
   // 공공 데이터는 실패해도 대시보드 나머지에 영향을 주지 않도록 개별 로드
   useEffect(() => {
@@ -119,13 +121,17 @@ export default function DashboardPage() {
       .catch(() => setAccumulated(null))
   }, [])
 
+  // 자체 데이터(요약·시간별·예측)는 선택한 구 기준으로 재조회한다.
+  // 구 전환 시 전체 로딩 화면 대신 이전 데이터를 잠깐 유지한다 (첫 로드만 로딩 표시).
   useEffect(() => {
+    const dq = district ? `district=${encodeURIComponent(district)}` : ''
     Promise.all([
-      apiClient.get<ApiResponse<DashboardSummary>>('/dashboard/summary'),
-      apiClient.get<ApiResponse<HourlyPoint[]>>('/dashboard/hourly?hours=24'),
-      apiClient.get<ApiResponse<PageResponse<Prediction>>>('/predictions?size=20'),
+      apiClient.get<ApiResponse<DashboardSummary>>(`/dashboard/summary${dq ? `?${dq}` : ''}`),
+      apiClient.get<ApiResponse<HourlyPoint[]>>(`/dashboard/hourly?hours=24${dq ? `&${dq}` : ''}`),
+      apiClient.get<ApiResponse<PageResponse<Prediction>>>(`/predictions?size=20${dq ? `&${dq}` : ''}`),
     ])
       .then(([s, h, p]) => {
+        setError(null)
         setSummary(s.data.data)
         setHourly(
           h.data.data.map((row) => ({
@@ -142,7 +148,7 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(errorMessage(err)))
       .finally(() => setLoading(false))
-  }, [])
+  }, [district])
 
   if (loading) return <p className="text-gray-500">불러오는 중...</p>
   if (error) return <p className="rounded-md bg-red-50 px-4 py-3 text-red-700">{error}</p>
@@ -151,7 +157,15 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900">대시보드</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-gray-900">
+          대시보드
+          <span className="ml-2 text-sm font-normal text-gray-500">
+            {district ? `${district} 기준` : '인천 전역 기준'}
+          </span>
+        </h2>
+        <RegionSelector value={district} onChange={setDistrict} />
+      </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard
@@ -172,7 +186,11 @@ export default function DashboardPage() {
         />
         <StatCard label="관측소 수" value={summary?.siteCount ?? '-'} />
         <StatCard label="최근 예측" value={summary?.recentPredictionCount ?? '-'} sub="24시간" />
-        <StatCard label="최근 보간" value={summary?.recentInterpolationCount ?? '-'} sub="24시간" />
+        <StatCard
+          label="최근 보간"
+          value={summary?.recentInterpolationCount ?? '-'}
+          sub={district ? '24시간 · 전체 기준' : '24시간'}
+        />
       </div>
 
       {/* 공공 데이터 영역 (현재 측정 / 기상 / 대기질 예보 / AI 비교 / 시스템 상태 구분) */}
@@ -180,7 +198,7 @@ export default function DashboardPage() {
         <div className="mb-2 flex items-baseline gap-3">
           <h3 className="font-semibold text-gray-900">공공 대기질·기상</h3>
           <span className="text-xs text-gray-400">
-            출처: 환경부·한국환경공단 AirKorea / 기상청
+            인천 전역 (시/도 단위 자료) · 출처: 환경부·한국환경공단 AirKorea / 기상청
           </span>
           <Link to="/public-air" className="text-xs text-blue-600 hover:underline">
             예보·경보 자세히 →
@@ -316,7 +334,7 @@ export default function DashboardPage() {
         <div className="mb-2 flex items-baseline gap-3">
           <h3 className="font-semibold text-gray-900">공공 데이터 누적 추이</h3>
           <span className="text-xs text-gray-400">
-            매시간 자동 수집 · 출처: AirKorea / 기상청
+            인천 전역 (시/도 단위 자료) · 매시간 자동 수집 · 출처: AirKorea / 기상청
             {accumulated != null && ` · 누적 ${accumulated.toLocaleString()}건`}
           </span>
         </div>
