@@ -79,13 +79,11 @@ public class OdorClient {
         while (true) {
             attempts++;
             try {
+                // serviceKey는 반드시 URI 템플릿 변수로 전달한다(엄격 인코딩: '+' 등 예약문자 포함 키).
+                // UriBuilder.queryParam은 '+'를 그대로 두어 서버가 공백으로 해석 → 인증 실패한다.
                 return restClient.get()
-                        .uri(builder -> builder.path(path)
-                                .queryParam("page", 1)
-                                .queryParam("perPage", props.perPage())
-                                .queryParam("returnType", "JSON")
-                                .queryParam("serviceKey", serviceKey)
-                                .build())
+                        .uri(path + "?page=1&perPage={rows}&returnType=JSON&serviceKey={key}",
+                                Map.of("rows", String.valueOf(props.perPage()), "key", serviceKey))
                         .retrieve()
                         .body(String.class);
             } catch (HttpStatusCodeException e) {

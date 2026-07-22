@@ -1,6 +1,7 @@
 package com.airvision.backend.publicdata.odor;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import com.airvision.backend.publicdata.odor.dto.OdorMeasurement;
 import java.util.List;
@@ -71,6 +72,33 @@ class OdorNormalizerTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).dilution()).isEqualTo(15.0);
+    }
+
+    @Test
+    void normalize_realDmsFormatWithSwappedAxisLabels() {
+        // 실데이터(2026-07 확인): 내부 도면좌표 + 괄호 안 도분초, X축 컬럼에 위도(37°)가 기록됨
+        List<OdorMeasurement> result = OdorNormalizer.normalize("가좌사업소", List.of(Map.of(
+                "관할사업소", "가좌사업소",
+                "측정일자", "2023-01-16",
+                "측정지점", "관리동 앞",
+                "주소_위치정보", "인천 서구 중봉대로 211",
+                "좌표_경도_X축", "426.94(37°29'55.0\")",
+                "좌표_위도_Y축", "284.83(126°38'48.8\")",
+                "측정값(복합악취희석배수)", "1.4")));
+
+        OdorMeasurement m = result.get(0);
+        assertThat(m.latitude()).isCloseTo(37.0 + 29.0 / 60 + 55.0 / 3600, within(1e-9));
+        assertThat(m.longitude()).isCloseTo(126.0 + 38.0 / 60 + 48.8 / 3600, within(1e-9));
+        assertThat(m.dilution()).isEqualTo(1.4);
+    }
+
+    @Test
+    void geoValue_dmsWithSpaces_andDecimalFallback() {
+        // 승기 실데이터: "389.7573(37° 23' 40.89\")" — 기호 뒤 공백 포함
+        assertThat(OdorNormalizer.geoValue("389.7573(37° 23' 40.89\")"))
+                .isCloseTo(37.0 + 23.0 / 60 + 40.89 / 3600, within(1e-9));
+        assertThat(OdorNormalizer.geoValue("37.4862")).isEqualTo(37.4862);
+        assertThat(OdorNormalizer.geoValue(126.6758)).isEqualTo(126.6758);
     }
 
     @Test
