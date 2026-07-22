@@ -36,7 +36,7 @@ class SiteControllerTest {
 
     private SiteResponse sampleSite(Long id) {
         return new SiteResponse(id, "서울시청", 37.5665, 126.9780, 38.0,
-                "SENSOR", "테스트 관측소", "POINT(126.978 37.5665)",
+                "SENSOR", "테스트 관측소", "미추홀구", "POINT(126.978 37.5665)",
                 Instant.parse("2026-07-17T00:00:00Z"), Instant.parse("2026-07-17T00:00:00Z"));
     }
 
@@ -48,7 +48,8 @@ class SiteControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].name").value("서울시청"))
-                .andExpect(jsonPath("$.data[0].latitude").value(37.5665));
+                .andExpect(jsonPath("$.data[0].latitude").value(37.5665))
+                .andExpect(jsonPath("$.data[0].district").value("미추홀구"));
     }
 
     @Test

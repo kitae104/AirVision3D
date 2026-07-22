@@ -39,6 +39,10 @@ public class ObservationSite {
     @Column(columnDefinition = "text")
     private String description;
 
+    /** 소속 행정구 (인천 핵심 3구만 값 존재, 그 외 NULL). 시드/마이그레이션으로만 채운다. */
+    @Column(length = 30)
+    private String district;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -105,6 +109,10 @@ public class ObservationSite {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getDistrict() {
+        return district;
     }
 
     public Instant getCreatedAt() {

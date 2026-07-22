@@ -12,6 +12,7 @@ public record SiteResponse(
         Double altitude,
         String siteType,
         String description,
+        String district,
         String geomWkt,
         Instant createdAt,
         Instant updatedAt
@@ -30,6 +31,7 @@ public record SiteResponse(
                 site.getAltitude(),
                 site.getSiteType(),
                 site.getDescription(),
+                site.getDistrict(),
                 geomWkt,
                 site.getCreatedAt(),
                 site.getUpdatedAt()
