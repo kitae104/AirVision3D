@@ -34,27 +34,32 @@ public class DashboardService {
         this.gradeProperties = gradeProperties;
     }
 
-    public Map<String, Object> summary() {
+    public Map<String, Object> summary(String district) {
         Instant now = Instant.now();
         Instant dayAgo = now.minus(Duration.ofHours(24));
 
-        // 관측소별 최신 PM2.5의 평균
-        var latest = observationRepository.findLatestPm25PerSite(now);
+        // 관측소별 최신 PM2.5의 평균 (district가 null이면 전체)
+        var latest = observationRepository.findLatestPm25PerSite(now, district);
         Double avgPm25 = latest.isEmpty() ? null : latest.stream()
                 .mapToDouble(ObservationRepository.SitePm25::getPm25).average().orElse(0);
 
         Map<String, Object> result = new HashMap<>();
         result.put("latestAvgPm25", avgPm25 == null ? null : Math.round(avgPm25 * 10) / 10.0);
         result.put("grade", avgPm25 == null ? null : gradeProperties.gradeOf(avgPm25));
-        result.put("siteCount", siteRepository.count());
-        result.put("recentPredictionCount", predictionRepository.countByPredictedAtAfter(dayAgo));
+        result.put("siteCount", district == null
+                ? siteRepository.count() : siteRepository.countByDistrict(district));
+        result.put("recentPredictionCount", district == null
+                ? predictionRepository.countByPredictedAtAfter(dayAgo)
+                : predictionRepository.countByPredictedAtAfterAndSite_District(dayAgo, district));
+        // 보간(IDW) 결과는 전체 관측소 기반 격자 표면이라 구 단위로 나눌 수 없다 → 항상 전체 건수
         result.put("recentInterpolationCount", interpolationRepository.countByCreatedAtAfter(dayAgo));
+        result.put("district", district);
         return result;
     }
 
-    public List<Map<String, Object>> hourlyAverage(int hours) {
+    public List<Map<String, Object>> hourlyAverage(int hours, String district) {
         Instant from = Instant.now().minus(Duration.ofHours(hours));
-        return observationRepository.findHourlyAveragePm25(from).stream()
+        return observationRepository.findHourlyAveragePm25(from, district).stream()
                 .map(row -> Map.<String, Object>of(
                         "time", row.getHour(),
                         "avgPm25", row.getAvgPm25() == null ? 0

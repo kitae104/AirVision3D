@@ -69,7 +69,7 @@ public interface ObservationRepository
             """, nativeQuery = true)
     List<SeriesRow> findSeries(@Param("from") Instant from, @Param("to") Instant to);
 
-    /** 시간별 평균 PM2.5 (대시보드 차트용). */
+    /** 시간별 평균 PM2.5 (대시보드 차트용). district가 null이면 전체. */
     interface HourlyAvg {
         Instant getHour();
 
@@ -80,11 +80,18 @@ public interface ObservationRepository
             SELECT date_trunc('hour', o.observed_at) AS hour,
                    AVG(o.pm25)                       AS avgPm25
             FROM observations o
+            JOIN observation_sites s ON s.id = o.site_id
             WHERE o.observed_at >= :from AND o.pm25 IS NOT NULL
+              AND (:district IS NULL OR s.district = :district)
             GROUP BY 1
             ORDER BY 1
             """, nativeQuery = true)
-    List<HourlyAvg> findHourlyAveragePm25(@Param("from") Instant from);
+    List<HourlyAvg> findHourlyAveragePm25(@Param("from") Instant from,
+                                          @Param("district") String district);
+
+    default List<HourlyAvg> findHourlyAveragePm25(Instant from) {
+        return findHourlyAveragePm25(from, null);
+    }
 
     @Query(value = """
             SELECT DISTINCT ON (o.site_id)
@@ -98,9 +105,15 @@ public interface ObservationRepository
             JOIN observation_sites s ON s.id = o.site_id
             WHERE o.pm25 IS NOT NULL
               AND o.observed_at <= :at
+              AND (:district IS NULL OR s.district = :district)
             ORDER BY o.site_id, o.observed_at DESC
             """, nativeQuery = true)
-    List<SitePm25> findLatestPm25PerSite(@Param("at") Instant at);
+    List<SitePm25> findLatestPm25PerSite(@Param("at") Instant at,
+                                         @Param("district") String district);
+
+    default List<SitePm25> findLatestPm25PerSite(Instant at) {
+        return findLatestPm25PerSite(at, null);
+    }
 
     /** 관측소/기간 조건을 조합한 검색 조건 (null 파라미터는 조건에서 제외). */
     static Specification<Observation> search(Long siteId, Instant from, Instant to) {

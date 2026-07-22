@@ -9,6 +9,9 @@ public interface ObservationSiteRepository extends JpaRepository<ObservationSite
 
     boolean existsByName(String name);
 
+    /** 구 소속 관측소 수 (대시보드 구 단위 필터용). */
+    long countByDistrict(String district);
+
     /** PostGIS geom 컬럼을 WKT 문자열로 조회 (PostGIS 저장·조회 검증용). */
     @Query(value = "SELECT ST_AsText(geom) FROM observation_sites WHERE id = :id", nativeQuery = true)
     Optional<String> findGeomWkt(@Param("id") Long id);

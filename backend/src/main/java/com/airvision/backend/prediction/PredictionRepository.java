@@ -12,6 +12,9 @@ public interface PredictionRepository extends JpaRepository<Prediction, Long> {
 
     long countByPredictedAtAfter(java.time.Instant time);
 
+    /** 구 소속 관측소의 최근 예측 건수 (대시보드 구 단위 필터용). */
+    long countByPredictedAtAfterAndSite_District(java.time.Instant time, String district);
+
     /** 관측소별 최신 예측 (3D 지도 예측 레이어용). */
     interface LatestPrediction {
         Long getSiteId();
