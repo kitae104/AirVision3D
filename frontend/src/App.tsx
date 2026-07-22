@@ -16,9 +16,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/map" element={<MapPage key="map" />} />
-        {/* 듀얼맵이 켜진 상태로 시작하는 전용 화면 (key로 /map과 상태 분리) */}
-        <Route path="/dual-map" element={<MapPage key="dual-map" initialDual />} />
+        <Route path="/map" element={<MapPage />} />
         <Route path="/observations" element={<ObservationsPage />} />
         <Route path="/public-air" element={<PublicAirPage />} />
         <Route path="/metrics" element={<MetricsPage />} />

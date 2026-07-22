@@ -33,6 +33,7 @@
 | 21 | 듀얼맵 시계열 이력 재생(Phase 20 제약 해소) | VERIFIED | 우측 비교 뷰가 기간 내 예측·보간 이력을 좌측 시계와 동기 재생. 프론트 38건 통과, Playwright 실검증(2026-07-22) |
 | 22 | 거리 측정 중 InfoBox 억제(Phase 20 제약 해소) | VERIFIED | 측정 중 뷰어 기본 클릭(엔티티 선택·더블클릭 추적) 제거→종료 시 복원. Playwright로 억제·복원 실검증(2026-07-22) |
 | 23 | ion 토큰 env 적용 수정 + 듀얼맵 비교 전용 페이지 | VERIFIED | vite envDir 루트 지정으로 루트 .env 토큰 실적용, 위성 시작·[위성/일반] 전환 실검증. /dual-map 메뉴 신설(두 지도 상태로 시작). 프론트 38건 통과(2026-07-22) |
+| 24 | 듀얼맵 비교 메뉴 제거(사용자 결정) | VERIFIED | /dual-map 라우트·메뉴·initialDual prop 되돌림(지도 내 듀얼맵 토글은 유지). 테스트·빌드 통과(2026-07-22) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -855,3 +856,20 @@ Phase 20의 알려진 제약 "거리 측정 중에도 엔티티 클릭 시 InfoB
 - `frontend/vite.config.ts`(envDir), `frontend/src/App.tsx`(/dual-map 라우트),
   `frontend/src/components/Layout.tsx`(메뉴), `frontend/src/pages/MapPage.tsx`(initialDual),
   `docs/user-guide.html`(§7 배경지도·듀얼맵 비교 메뉴·이력 v1.12), `docs/progress.md`(본 절)
+
+## Phase 24. 듀얼맵 비교 메뉴 제거 — VERIFIED (2026-07-22)
+
+사용자 결정: 3D 지도 화면의 [듀얼맵] 토글로 충분해 전용 메뉴는 불필요.
+Phase 23의 ② 항목만 되돌렸다(① ion 토큰 envDir 수정은 유지).
+
+- [x] `/dual-map` 라우트·"듀얼맵 비교" 사이드바 메뉴 제거,
+      `MapPage`의 `initialDual` prop 제거(도입 전 시그니처로 복원)
+- [x] 지도 화면의 [듀얼맵] 토글·시계열 비교 재생 기능은 그대로 유지
+- [x] 검증: tsc·oxlint·Vitest 38건·빌드 통과 (제거 변경이라 실기동 검증은 생략,
+      /map 기능은 무변경)
+
+### 변경 파일
+
+- `frontend/src/App.tsx`, `frontend/src/components/Layout.tsx`,
+  `frontend/src/pages/MapPage.tsx`, `docs/user-guide.html`(§7·이력 v1.13),
+  `docs/progress.md`(본 절)
