@@ -985,11 +985,22 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicAir?.sido])
 
-  // 거리 측정 모드: 좌클릭으로 지점 추가(점+선+누적 거리 라벨), 우클릭으로 종료
+  // 거리 측정 모드: 좌클릭으로 지점 추가(점+선+누적 거리 라벨), 우클릭으로 종료.
+  // 측정 중에는 뷰어 기본 클릭 동작(엔티티 선택→InfoBox, 더블클릭 추적)을 제거해
+  // 마커·격자 위를 클릭해도 InfoBox가 열리지 않게 하고, 종료 시 원래대로 복원한다.
   useEffect(() => {
     const viewer = viewerRef.current
     const measureDs = measureDsRef.current
     if (!measuring || !viewer || !measureDs) return
+
+    viewer.selectedEntity = undefined // 열려 있는 InfoBox 닫기
+    const defaultHandler = viewer.screenSpaceEventHandler
+    const defaultLeftClick = defaultHandler.getInputAction(
+      Cesium.ScreenSpaceEventType.LEFT_CLICK)
+    const defaultDoubleClick = defaultHandler.getInputAction(
+      Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
+    defaultHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK)
+    defaultHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
     handler.setInputAction((click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
@@ -1046,6 +1057,17 @@ export default function MapPage() {
     return () => {
       handler.destroy()
       measurePointsRef.current = []
+      // 뷰어 기본 클릭 동작 복원 (뷰어가 이미 파괴됐으면 생략)
+      if (!viewer.isDestroyed()) {
+        if (defaultLeftClick) {
+          defaultHandler.setInputAction(
+            defaultLeftClick, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+        }
+        if (defaultDoubleClick) {
+          defaultHandler.setInputAction(
+            defaultDoubleClick, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
+        }
+      }
     }
   }, [measuring])
 

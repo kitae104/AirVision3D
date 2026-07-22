@@ -31,6 +31,7 @@
 | 19 | 최종보고서 정합성 점검 + 인천 핵심 3구(미추홀·남동·연수) 중심화 | VERIFIED | 기반 문서(최종보고서 PDF 78쪽) 전수 확인·격차 분석. 초기 뷰 3구 조망+구 이동 버튼, V4 인천 관측소 6곳, 대시보드 인천 기준. 실 DB·Playwright 검증(2026-07-22) |
 | 20 | 최종보고서 격차 기능 4종(Modified IDW·태양고도·듀얼맵·뷰어 유틸) | VERIFIED | Python 교차검증(1e-6)·백엔드(신규 11건)·AI 73건·프론트 34건 통과. 실 DB·실 AirKorea·Playwright 실검증(2026-07-22) |
 | 21 | 듀얼맵 시계열 이력 재생(Phase 20 제약 해소) | VERIFIED | 우측 비교 뷰가 기간 내 예측·보간 이력을 좌측 시계와 동기 재생. 프론트 38건 통과, Playwright 실검증(2026-07-22) |
+| 22 | 거리 측정 중 InfoBox 억제(Phase 20 제약 해소) | VERIFIED | 측정 중 뷰어 기본 클릭(엔티티 선택·더블클릭 추적) 제거→종료 시 복원. Playwright로 억제·복원 실검증(2026-07-22) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -760,7 +761,7 @@ Phase 19에서 식별한 보고서 대비 격차 4건을 우선순위 순서로 
 ### 알려진 제약
 
 - ~~듀얼맵 우측 뷰어는 현재값(최신 예측·보간)만 표시한다~~ → **해결(Phase 21)**: 시계열 이력 재생 지원
-- 거리 측정 중에도 엔티티 클릭 시 InfoBox가 열릴 수 있다(빈 지역을 클릭해 측정 권장)
+- ~~거리 측정 중에도 엔티티 클릭 시 InfoBox가 열릴 수 있다~~ → **해결(Phase 22)**: 측정 중 기본 클릭 억제
 - 위성 배경 전환은 Cesium ion 토큰이 있어야 노출된다(현재 개발 환경 미설정으로 미육안검증)
 - `resnet18_solar_v1` 지표는 합성 120장·3 epochs 결과로 파이프라인 검증용이다(성능 인용 금지)
 
@@ -801,3 +802,21 @@ Phase 20의 알려진 제약 "듀얼맵 우측 뷰어는 현재값 전용"을 �
 - 신규: `frontend/src/utils/compareSeries.ts`, `frontend/src/utils/compareSeries.test.ts`
 - 수정: `frontend/src/pages/MapPage.tsx`(시계 동기화·시계열 분기·seriesKey·라벨),
   `docs/user-guide.html`(§7 듀얼맵·이력 v1.10), `docs/progress.md`(본 절)
+
+## Phase 22. 거리 측정 중 InfoBox 억제 — VERIFIED (2026-07-22)
+
+Phase 20의 알려진 제약 "거리 측정 중에도 엔티티 클릭 시 InfoBox가 열릴 수 있다"를 해소했다.
+
+- [x] 측정 모드 진입 시: 열려 있는 InfoBox를 닫고(`selectedEntity = undefined`),
+      뷰어 기본 입력(LEFT_CLICK 엔티티 선택, LEFT_DOUBLE_CLICK 엔티티 추적)을
+      `screenSpaceEventHandler`에서 제거해 마커·격자 위를 클릭해도 측정 지점만 추가되게 함
+- [x] 측정 종료 시(우클릭/토글 해제/언마운트): 저장해 둔 기본 입력 핸들러를 그대로 복원
+      (뷰어가 이미 파괴된 경우 생략)
+- [x] 검증: tsc·oxlint·Vitest 38건 통과. Playwright 실검증 — 동일 지점 클릭이
+      평상시엔 InfoBox 표시, 측정 중엔 미표시, 우클릭 종료 후엔 다시 표시(복원) 확인.
+      콘솔 에러 0건(로그인 전 401 1건은 정상 인증 흐름)
+
+### 변경 파일
+
+- `frontend/src/pages/MapPage.tsx`(측정 effect: 기본 클릭 제거·복원),
+  `docs/user-guide.html`(§7·이력 v1.11), `docs/progress.md`(본 절)
