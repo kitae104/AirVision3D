@@ -10,6 +10,8 @@ public interface PredictionRepository extends JpaRepository<Prediction, Long> {
 
     Page<Prediction> findBySite_IdOrderByPredictedAtDesc(Long siteId, Pageable pageable);
 
+    Page<Prediction> findBySite_DistrictOrderByPredictedAtDesc(String district, Pageable pageable);
+
     long countByPredictedAtAfter(java.time.Instant time);
 
     /** 구 소속 관측소의 최근 예측 건수 (대시보드 구 단위 필터용). */

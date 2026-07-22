@@ -51,13 +51,16 @@ public class PredictionController {
                 siteId, modelName, image, temperature, humidity, windSpeed));
     }
 
-    @Operation(summary = "예측 결과 목록 조회 (최신순, 관측소 필터)")
+    @Operation(summary = "예측 결과 목록 조회 (최신순, 관측소·구 필터)")
     @GetMapping
     public ApiResponse<PageResponse<PredictionResponse>> list(
             @RequestParam(required = false) Long siteId,
+            @RequestParam(required = false) String district,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(predictionService.findRecent(siteId, page, Math.min(size, 200)));
+        return ApiResponse.ok(predictionService.findRecent(
+                siteId, com.airvision.backend.site.Districts.validate(district),
+                page, Math.min(size, 200)));
     }
 
     @Operation(summary = "모델 성능지표 조회 (AI 서비스 프록시)")

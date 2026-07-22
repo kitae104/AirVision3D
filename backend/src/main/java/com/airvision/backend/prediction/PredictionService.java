@@ -66,13 +66,18 @@ public class PredictionService {
         return PredictionResponse.from(predictionRepository.save(prediction));
     }
 
-    public PageResponse<PredictionResponse> findRecent(Long siteId, int page, int size) {
+    public PageResponse<PredictionResponse> findRecent(Long siteId, String district,
+                                                       int page, int size) {
         var pageable = PageRequest.of(page, size);
-        var result = (siteId != null
-                ? predictionRepository.findBySite_IdOrderByPredictedAtDesc(siteId, pageable)
-                : predictionRepository.findAllByOrderByPredictedAtDesc(pageable))
-                .map(PredictionResponse::from);
-        return PageResponse.from(result);
+        org.springframework.data.domain.Page<Prediction> result;
+        if (siteId != null) {
+            result = predictionRepository.findBySite_IdOrderByPredictedAtDesc(siteId, pageable);
+        } else if (district != null) {
+            result = predictionRepository.findBySite_DistrictOrderByPredictedAtDesc(district, pageable);
+        } else {
+            result = predictionRepository.findAllByOrderByPredictedAtDesc(pageable);
+        }
+        return PageResponse.from(result.map(PredictionResponse::from));
     }
 
     /** AI 서비스 모델 성능지표 조회 (모델 성능 화면용 프록시). */

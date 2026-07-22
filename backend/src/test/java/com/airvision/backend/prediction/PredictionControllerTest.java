@@ -102,12 +102,28 @@ class PredictionControllerTest {
 
     @Test
     void list_returnsPagedPredictions() throws Exception {
-        when(predictionService.findRecent(eq(null), eq(0), eq(20)))
+        when(predictionService.findRecent(eq(null), eq(null), eq(0), eq(20)))
                 .thenReturn(new PageResponse<>(List.of(sampleResponse()), 0, 20, 1, 1));
 
         mockMvc.perform(get("/api/predictions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].siteName").value("서울시청"))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    void list_withDistrict_passesDistrict() throws Exception {
+        when(predictionService.findRecent(eq(null), eq("남동구"), eq(0), eq(20)))
+                .thenReturn(new PageResponse<>(List.of(sampleResponse()), 0, 20, 1, 1));
+
+        mockMvc.perform(get("/api/predictions").param("district", "남동구"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].predictedPm25").value(28.75));
+    }
+
+    @Test
+    void list_invalidDistrict_returns400() throws Exception {
+        mockMvc.perform(get("/api/predictions").param("district", "부평구"))
+                .andExpect(status().isBadRequest());
     }
 }
