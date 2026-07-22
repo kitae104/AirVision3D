@@ -37,7 +37,7 @@
 
 | 엔드포인트 | 변경 |
 |---|---|
-| `GET /api/dashboard/summary` | `?district=` 추가. 해당 구 관측소만으로 평균 PM2.5·관측소 수·최근 예측/보간 수 집계 |
+| `GET /api/dashboard/summary` | `?district=` 추가. 해당 구 관측소만으로 평균 PM2.5·관측소 수·최근 예측 수 집계. 단 **최근 보간 수는 항상 전체 기준** — IDW 보간 결과는 전체 관측소 기반 격자 표면이라 구에 귀속되지 않는다. 구 선택 시 프론트 카드에 "전체 기준" 라벨을 표시한다 |
 | `GET /api/dashboard/hourly` | `?district=` 추가. 해당 구 관측소의 시간별 평균만 반환 |
 | `GET /api/predictions` | `?district=` 추가. 관측소(site) 조인으로 필터 (관측 vs 예측 차트용) |
 
