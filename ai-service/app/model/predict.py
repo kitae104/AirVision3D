@@ -44,7 +44,9 @@ class Predictor:
             raise FileNotFoundError(f"모델 파일이 없습니다: {model_dir / 'model.pt'}")
         config = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
         scaler = EnvScaler.load(model_dir / "scaler.json")
-        model = MultimodalPm25Net(pretrained=False, env_dim=len(scaler.columns))
+        # backbone 미기록(구버전 모델)은 resnet18로 간주한다
+        model = MultimodalPm25Net(pretrained=False, env_dim=len(scaler.columns),
+                                  backbone=config.get("backbone", "resnet18"))
         model.load_state_dict(torch.load(model_dir / "model.pt",
                                          map_location="cpu", weights_only=True))
         model.eval()

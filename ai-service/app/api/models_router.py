@@ -89,6 +89,8 @@ class TrainRequest(BaseModel):
     batch_size: int = Field(default=8, ge=1, le=128)
     learning_rate: float = Field(default=1e-3, gt=0)
     pretrained: bool = False
+    backbone: str = Field(default="resnet18",
+                          pattern="^(resnet18|convnext_tiny|swin_t)$")
     image_size: int = Field(default=224, ge=64, le=512)
     apply_mad_correction: bool = False
     use_solar_altitude: bool = False
@@ -118,7 +120,8 @@ def train(request: TrainRequest) -> ApiResponse:
             dataset_dir=dataset_dir, models_dir=settings.models_dir,
             model_name=request.model_name, epochs=request.epochs,
             batch_size=request.batch_size, learning_rate=request.learning_rate,
-            pretrained=request.pretrained, image_size=request.image_size,
+            pretrained=request.pretrained, backbone=request.backbone,
+            image_size=request.image_size,
             apply_mad_correction=request.apply_mad_correction,
             use_solar_altitude=request.use_solar_altitude, seed=request.seed,
             grades_config_path=settings.grades_config_path)

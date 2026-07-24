@@ -20,6 +20,47 @@ def test_network_forward_shape():
     assert output.shape == (2, 1)
 
 
+@pytest.mark.parametrize("backbone", ["convnext_tiny", "swin_t"])
+def test_network_forward_shape_alternative_backbones(backbone):
+    """CCTV 추론 모듈 요구 백본(ConvNeXt/Swin)도 동일 인터페이스로 동작한다."""
+    model = MultimodalPm25Net(pretrained=False, backbone=backbone)
+    image = torch.randn(2, 3, 64, 64)
+    env = torch.randn(2, 3)
+    assert model(image, env).shape == (2, 1)
+
+
+def test_network_rejects_unknown_backbone():
+    with pytest.raises(ValueError, match="backbone"):
+        MultimodalPm25Net(pretrained=False, backbone="resnet152")
+
+
+class TestBackboneRoundtrip:
+
+    @pytest.fixture(scope="class")
+    def convnext_model(self, small_dataset, tmp_path_factory):
+        """convnext_tiny 백본 1 epoch smoke 학습."""
+        dataset_dir, _ = small_dataset
+        models_dir = tmp_path_factory.mktemp("models_convnext")
+        summary = train_model(
+            dataset_dir=dataset_dir, models_dir=models_dir,
+            model_name="smoke_convnext_model", epochs=1, batch_size=4,
+            image_size=64, pretrained=False, backbone="convnext_tiny", seed=0)
+        return models_dir, summary
+
+    def test_config_records_backbone(self, convnext_model):
+        _, summary = convnext_model
+        assert summary["config"]["backbone"] == "convnext_tiny"
+        assert summary["config"]["architecture"] == "convnext_tiny_multimodal"
+
+    def test_predictor_loads_backbone_from_config(self, convnext_model):
+        models_dir, _ = convnext_model
+        predictor = Predictor.load(models_dir / "smoke_convnext_model")
+        image = Image.new("RGB", (320, 240), (150, 160, 170))
+        result = predictor.predict(image, temperature=24.0, humidity=60.0, wind_speed=2.0)
+        assert result["pm25"] >= 0
+        assert result["grade"] in ["좋음", "보통", "나쁨", "매우나쁨"]
+
+
 @pytest.fixture(scope="session")
 def trained_model(small_dataset, tmp_path_factory):
     """1 epoch smoke 학습 (64px, 소형 데이터셋)."""

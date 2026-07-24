@@ -60,6 +60,7 @@ def train_model(
         batch_size: int = 8,
         learning_rate: float = 1e-3,
         pretrained: bool = False,
+        backbone: str = "resnet18",
         image_size: int = 224,
         roi: Roi | None = None,
         apply_mad_correction: bool = False,
@@ -94,7 +95,8 @@ def train_model(
     val_loader = make_loader(split["val"], shuffle=False)
     test_loader = make_loader(split["test"], shuffle=False)
 
-    model = MultimodalPm25Net(pretrained=pretrained, env_dim=len(env_columns)).to(device)
+    model = MultimodalPm25Net(pretrained=pretrained, env_dim=len(env_columns),
+                              backbone=backbone).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.SmoothL1Loss()
 
@@ -130,7 +132,8 @@ def train_model(
     # 저장
     config = {
         "model_name": model_name,
-        "architecture": "resnet18_multimodal",
+        "architecture": f"{backbone}_multimodal",
+        "backbone": backbone,
         "pretrained": pretrained,
         "image_size": image_size,
         "roi": roi.__dict__ if roi else None,
