@@ -154,8 +154,8 @@ public class KmaWeatherService {
         return current(station.latitude(), station.longitude());
     }
 
-    /** 문자열 값 → Double. 결측(|값|>=900) 및 숫자 아님은 null. */
-    static Double parseValue(String raw) {
+    /** 문자열 값 → Double. 결측(|값|>=900) 및 숫자 아님은 null. (wind 패키지에서도 재사용) */
+    public static Double parseValue(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
