@@ -42,6 +42,7 @@
 | POST | /api/predictions/run | multipart{siteId, image, temperature, humidity, windSpeed, modelName?} → 예측·저장. actual_pm25에 해당 관측소 최신 관측값 자동 기록 |
 | GET | /api/predictions?siteId&page&size | 목록 (최신순) |
 | GET | /api/predictions/models/{name}/metrics | 모델 성능지표 (AI 서비스 프록시) |
+| POST | /api/predictions/cctv | multipart{siteId, image, temperature, humidity, modelName?} → CCTV 이미지 즉시 추정(저장 안 함). 주간: AI 추론 + 최근접 실측 비율 PM10 + Koschmieder 간이 가시거리. 야간(태양고도<0도): 최근접 AirKorea 실측 대체(mode=STATION_FALLBACK) |
 
 ### IDW 보간
 | 메서드 | 경로 | 설명 |
@@ -58,6 +59,13 @@
 | GET | /api/viz/predictions/latest | 관측소별 최신 예측 (3D 예측 레이어) |
 | GET | /api/viz/observations/time-range | 관측 데이터 존재 범위 {from, to} |
 | GET | /api/viz/observations/series?from&to | 관측소별 PM2.5 시계열 (최대 7일) |
+
+### 바람장 / 확산(이류) 예측 (Phase 28)
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | /api/wind/field | 인천권(126.45~126.95, 37.25~37.60) 25×25 시간별 바람장 {bounds, width, height, baseTime, mock, stale, hours[{time, u[], v[], speedMin, speedMax}]}. 기상청 초단기예보 UUU/VVV(+6h), row 0=남쪽 row-major |
+| GET | /api/wind/advection?hours=6 | PM2.5·PM10 단순 이류 예측 (semi-Lagrangian, advection-only, 1~6시간) {bounds, width, height, model, mock, frames[{time, pm25[], pm10[]?}]}. 초기장은 AirKorea 인천 실측 IDW |
+| GET | /api/air-quality/district-forecast?hours=6 | 미추홀·남동·연수 구별 요약: current[{district, pm25, pm10, wind{speedMs, directionDeg, directionText, movementText}}] + hourly[{time, districts[...]}]. 기존 /api/air-quality/forecast(예보통보)와 별개 |
 
 ### 악취 모니터링
 | 메서드 | 경로 | 설명 |
@@ -76,8 +84,8 @@
 | GET | /health | 헬스체크 |
 | GET | /models | 저장된 모델 목록 |
 | GET | /models/{name}/metrics | 테스트 성능지표 (회귀+등급) |
-| POST | /models/train | 학습 실행 (동기, 소규모 데이터용). CLI: `scripts/train_model.py` |
-| POST | /models/{name}/predict | multipart{image, temperature, humidity, wind_speed} → {pm25, grade} |
+| POST | /models/train | 학습 실행 (동기, 소규모 데이터용). backbone: resnet18(기본)/convnext_tiny/swin_t. CLI: `scripts/train_model.py --backbone ...` |
+| POST | /models/{name}/predict | multipart{image, temperature, humidity, wind_speed, latitude?, longitude?, captured_at?} → {pm25, grade} |
 
 - 모델명은 `[A-Za-z0-9_.-]{1,64}` 만 허용 (경로 조작 방지)
 - 학습 dataset_dir는 data/ 내부 경로만 허용

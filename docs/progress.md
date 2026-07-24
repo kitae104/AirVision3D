@@ -3,7 +3,7 @@
 > 상태 정의: NOT_STARTED / IN_PROGRESS / BLOCKED / COMPLETED(코드 작성 완료) / VERIFIED(실행·테스트 성공 확인)
 > 갱신 규칙: 각 작업 완료 시 본 문서를 갱신한다. 테스트를 실행하지 못한 경우 사유를 기록한다.
 
-최종 갱신: 2026-07-22
+최종 갱신: 2026-07-25
 
 ## Phase 요약
 
@@ -37,6 +37,7 @@
 | 25 | 대시보드 지역 선택(인천 전역·핵심 3구 필터) | VERIFIED | district 컬럼(V5)·요약/시간별/예측 구 필터·RegionSelector. 백엔드 신규 9건, 프론트 41건, 실 DB·Playwright 검증(2026-07-22) |
 | 26 | 관측값 CSV 일괄 업로드(MVP 잔여 필수 항목) | VERIFIED | Phase 2 보류 항목 구현. 부분 성공 정책(유효 저장·중복 건너뜀·행별 오류 보고). 백엔드 신규 11건, 실 DB·UI 검증(2026-07-22) |
 | 27 | 악취 모니터링(인천환경공단 OpenAPI) | VERIFIED | 가좌·승기·송도 사업소 복합악취 측정 연동(odcloud, Mock 자동). 지도 악취 레이어+공공 대기질 표. 백엔드 신규 15건. **실키 검증 완료(2026-07-23)**: 51지점 전좌표 확보. 키 인코딩·DMS 좌표 결함 2건 발견·수정 |
+| 28 | 바람길 시각화 + 미세먼지 확산(이류) 예측 + CCTV 추정 | COMPLETED | 바람장 API·이류(PM2.5/PM10)·구별 예측 API·CCTV 야간 대체는 **실키 실기동 검증 완료(2026-07-25)**. 프론트 파티클·슬라이더는 tsc/빌드/테스트 통과, 브라우저 육안 확인만 잔여(자동화 불가 사유 기록) |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -1041,3 +1042,82 @@ wind_direction)를 그대로 사용한다.
   `pages/PublicAirPage.tsx`(악취 표)
 - 문서: `docs/api-spec.md`(악취 절), `docs/user-guide.html`(§7·공공 대기질·이력 v1.16),
   `docs/progress.md`(본 절)
+
+## Phase 28. 바람길 시각화 + 미세먼지 확산(이류) 예측 + CCTV 추정 — COMPLETED (2026-07-25)
+
+사용자 요구사항: "CCTV 이미지 기반 미세먼지 추정 + 실시간 바람길 데이터를 결합한
+인천 남동·미추홀·연수구 시공간 확산 예측 모듈". 기존 승인 설계
+(`docs/superpowers/specs/2026-07-24-wind-field-advection-design.md`)와 계획
+(`docs/superpowers/plans/2026-07-24-wind-field-advection.md`)의 Task 1~7을 실행하고,
+요구사항 격차분(구별 예측 API·PM10·CCTV 야간 대체·AI 백본)을 확장 구현했다.
+
+### 기준 문서와 요구사항의 차이 (보고)
+
+- 요구사항 예시 경로 `GET /api/air-quality/forecast`는 **Phase 10 대기질 예보통보 API가
+  이미 사용 중** → 구별 예측은 `GET /api/air-quality/district-forecast`로 신설
+- 요구사항의 ConvNeXt/Swin 백본: 기존 검증 파이프라인은 ResNet18 → **선택형 백본**
+  (`--backbone convnext_tiny|swin_t`)으로 추가하고 기본값은 resnet18 유지(MVP 원칙)
+- 캐시 주기 10~15분 요구: 바람장 캐시는 기존 `weatherSeconds`(기본 1800초=30분) 재사용 —
+  기상청 초단기예보 발표 주기(30분)와 일치해 더 짧은 주기는 실익 없음. env로 조정 가능
+- 확산(diffusion) 항: 승인 설계대로 순수 이류(advection-only, 요구사항의
+  "바람 벡터 이동 모의" 선택지) — 확산·배출·침적 미포함을 응답 model 필드와 UI 배지에 명시
+
+### 구현 내용
+
+- [x] **Task 1** `WindUtils.toU/toV` — 기상학적 풍향·풍속 → UV 성분 (테스트 1건 추가) — VERIFIED
+- [x] **Task 2** `publicdata/wind/` 신설: `WindGridPoints`(인천권 bbox 126.45~126.95,
+      37.25~37.60 + 3×3 샘플 지점), `WindFieldService`(초단기예보 UUU/VVV 수집,
+      VEC/WSD 폴백, KMA 격자 단위 중복 조회 방지, 25×25 IDW 보간, TtlCache stale 폴백),
+      `GET /api/wind/field` (테스트 3건) — VERIFIED
+- [x] **Task 3** `AdvectionService` — AirKorea 인천 실측 IDW 초기 농도장 →
+      semi-Lagrangian 역추적(1시간 간격, bilinear 샘플링, 경계 clamp) +1h~+6h.
+      **PM2.5·PM10 병행 이류**(PM10 실측 없으면 null), `GET /api/wind/advection?hours=`
+      (테스트 6건: 서풍 피크 동진·무풍 유지·경계 clamp·범위 검증·PM10 병행·PM10 부재) — VERIFIED
+- [x] **Task 4** `WindController` + 전체 빌드 — VERIFIED
+- [x] **확장 A: 구별 확산 예측 API** `GET /api/air-quality/district-forecast?hours=6` —
+      `Districts`(미추홀·남동·연수 중심좌표는 프론트 sido.ts와 동일, 근사 bbox),
+      `DistrictForecastService`: 구별 현재 추정치(실측 IDW), 구 중심 바람 벡터
+      (풍속·풍향각·16방위 텍스트·이동 방향 텍스트, 풍속<0.1m/s는 무풍/정체),
+      시간별 구 bbox 평균 PM2.5/PM10 (테스트 4건) — VERIFIED
+- [x] **Task 5·6(프론트)** `cesium-wind-layer@0.10.1` 파티클 애니메이션(wind 레이어),
+      이류 예측 셀 타일링(advection 레이어, PM10 병기 InfoBox), +1h~+6h 시간 슬라이더,
+      "단순 이류 추정"·Mock 배지. tsc·빌드·Vitest 43건 통과 — COMPLETED (육안 확인 잔여)
+- [x] **확장 B: AI 백본 선택** ai-service `MultimodalPm25Net(backbone=)` —
+      resnet18(기본)·convnext_tiny·swin_t. CLI `--backbone`, 학습 API `backbone` 필드,
+      config 기록·로드(구버전 모델은 resnet18 간주). pytest 78건 통과(신규 5건:
+      forward 2백본·미지원 거부·config 기록·convnext 학습/추론 왕복) — VERIFIED
+- [x] **확장 C: CCTV 추정 + 야간 대체** `POST /api/predictions/cctv`
+      (siteId·modelName·image·temperature·humidity) — `SolarUtils`(NOAA 근사식 Java 포트,
+      Python 구현과 1e-4 교차검증 4케이스). 태양고도 ≥0도: AI 이미지 추론(풍속은 기상청
+      실황 자동 조회, 실패 시 0) + 최근접 실측 PM10/PM2.5 비율로 PM10 추정 +
+      Koschmieder 간이 가시거리(bext=0.0134+0.0039·PM2.5, 0.1~20km 클램프).
+      태양고도 <0도(야간): 최근접 AirKorea 실측 대체(STATION_FALLBACK), 대체 불가 시 400.
+      결과는 저장하지 않는 즉시 추정 (테스트 8건) — VERIFIED
+
+### 실기동 검증 (실키, 원격 PostgreSQL, 2026-07-25)
+
+- `GET /api/wind/field` → mock=false, 25×25, hours 6개, u/v 625개, speedMax 실측값
+- `GET /api/wind/advection?hours=6` → model=advection-only, frames 6개, PM2.5+PM10 배열
+- `GET /api/air-quality/district-forecast?hours=6` → 3구 현재 추정치
+  (예: 미추홀 PM2.5 8.2·PM10 24.3), 남풍 계열 0.5~0.7m/s "북쪽으로 이동", hourly 6프레임
+- `POST /api/predictions/cctv` (01:11 KST 실야간) → night=true, solarElevationDeg=-31.9,
+  mode=STATION_FALLBACK, 최근접 측정소 "임학" PM2.5 15.0·PM10 21.0·좋음, visibilityKm 20.0
+- 백엔드 `gradlew build` 전체 통과(신규 22건 포함), ai-service pytest 78건,
+  프론트 tsc·빌드·Vitest 43건 통과
+
+### 미완료 항목·알려진 한계
+
+- **프론트 육안 확인 잔여**: Chrome 확장 미연결 + Playwright MCP 미가용으로 파티클
+  애니메이션·슬라이더 화면 검증을 자동화하지 못함. 확인 항목: ① 파티클 흐름,
+  ② wind/advection 체크박스, ③ 슬라이더 +1h~+6h 프레임 전환, ④ 파티클 방향과 상단
+  풍향 텍스트 일치(불일치 시 windLayer 옵션에 `flipY: true` 추가), ⑤ 콘솔 오류 없음
+- 도메인이 작아(약 44km) 강풍 시 수 시간 내 경계 유입값(clamp)이 지배 — 설계상 알려진 한계
+- Mock 모드는 전 격자점 동일 fixture → 균일 바람장(허용된 동작)
+- 이류 초기장은 AirKorea 인천 실측 IDW — 관측 공백 지역은 IDW 평활화의 한계를 가짐
+- CCTV 추정의 PM10(비율 추정)·가시거리(Koschmieder 간이식)는 간이 지표로 응답·문서에 명시
+- 구별 집계의 구 경계는 행정경계 폴리곤이 아닌 근사 bbox
+
+### 다음 권장 작업
+
+- 사용자 브라우저 육안 확인(위 5개 항목) 후 프론트 항목 VERIFIED 승격
+- CCTV 실이미지 데이터셋 확보 시 convnext_tiny/swin_t 백본 성능 비교 실험
