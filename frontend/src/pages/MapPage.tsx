@@ -1,10 +1,13 @@
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+import { WindLayer } from 'cesium-wind-layer'
+import type { WindData } from 'cesium-wind-layer'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import type {
-  AirAlert, ApiResponse, CurrentAirQuality, IdwGridResponse, InterpolationResult, OdorResponse,
-  OdorSpot, PageResponse, PollutantValue, Prediction, PublicStationAir, Site, WeatherNow,
+  AdvectionResponse, AirAlert, ApiResponse, CurrentAirQuality, IdwGridResponse,
+  InterpolationResult, OdorResponse, OdorSpot, PageResponse, PollutantValue, Prediction,
+  PublicStationAir, Site, WeatherNow, WindFieldResponse,
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { odorGradeOf } from '../config/odorGrades'
@@ -54,7 +57,7 @@ interface PublicSeriesStation {
 
 type LayerKey =
   | 'observation' | 'prediction' | 'interpolation' | 'airkorea' | 'idwSurface' | 'alertRegion'
-  | 'odor'
+  | 'odor' | 'wind' | 'advection'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
   observation: '관측값',
@@ -64,6 +67,8 @@ const LAYER_LABELS: Record<LayerKey, string> = {
   idwSurface: '실측 IDW 표면',
   alertRegion: '경보 권역',
   odor: '악취 측정(인천)',
+  wind: '바람길 (기상청 예보)',
+  advection: 'PM2.5 이동 예측',
 }
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
@@ -359,6 +364,54 @@ function addIdwSurface(ds: Cesium.CustomDataSource, grid: IdwGridResponse) {
   }
 }
 
+/** 백엔드 바람장 시각 1개 → cesium-wind-layer 입력 형식 */
+function toWindData(field: WindFieldResponse, hourIndex: number): WindData {
+  const h = field.hours[hourIndex]
+  return {
+    u: { array: new Float32Array(h.u), min: Math.min(...h.u), max: Math.max(...h.u) },
+    v: { array: new Float32Array(h.v), min: Math.min(...h.v), max: Math.max(...h.v) },
+    width: field.width,
+    height: field.height,
+    bounds: field.bounds,
+  }
+}
+
+/** 이류 예측 프레임 1개를 셀 타일링으로 렌더 (addIdwSurface와 동일한 표현 방식) */
+function addAdvectionFrame(ds: Cesium.CustomDataSource, resp: AdvectionResponse,
+                           frameIndex: number) {
+  ds.entities.removeAll()
+  const frame = resp.frames[Math.min(frameIndex, resp.frames.length - 1)]
+  if (!frame) return
+  const cellLatDeg = (resp.bounds.north - resp.bounds.south) / resp.height
+  const cellLonDeg = (resp.bounds.east - resp.bounds.west) / resp.width
+  const mPerDegLat = 111_320
+  const timeText = new Date(frame.time).toLocaleString('ko-KR')
+  for (let row = 0; row < resp.height; row++) {
+    const lat = resp.bounds.south + (row + 0.5) * cellLatDeg
+    const mPerDegLon = 111_320 * Math.cos((lat * Math.PI) / 180)
+    for (let col = 0; col < resp.width; col++) {
+      const pm25 = frame.pm25[row * resp.width + col]
+      const pm10 = frame.pm10 ? frame.pm10[row * resp.width + col] : null
+      const lon = resp.bounds.west + (col + 0.5) * cellLonDeg
+      ds.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, 40),
+        box: {
+          dimensions: new Cesium.Cartesian3(
+            cellLonDeg * mPerDegLon, cellLatDeg * mPerDegLat, 60),
+          material: pm25Color(pm25, 0.4),
+        },
+        name: 'PM2.5 이동 예측',
+        description: `<table class="cesium-infoBox-defaultTable"><tbody>
+          <tr><th>예측 PM2.5</th><td><b>${pm25.toFixed(1)}</b> ㎍/㎥ (${gradeOf(pm25).name})</td></tr>
+          ${pm10 != null ? `<tr><th>예측 PM10</th><td><b>${pm10.toFixed(1)}</b> ㎍/㎥</td></tr>` : ''}
+          <tr><th>예측 시각</th><td>${timeText}</td></tr>
+          <tr><th>방식</th><td>단순 이류 추정 (바람 이동만 반영, 확산·배출 미포함)</td></tr>
+          </tbody></table>`,
+      })
+    }
+  }
+}
+
 const ALERT_ITEM_LABELS: Record<string, string> = {
   PM10: '미세먼지', PM25: '초미세먼지', O3: '오존',
 }
@@ -575,6 +628,8 @@ export default function MapPage() {
     idwSurface: false,
     alertRegion: true,
     odor: true,
+    wind: true,
+    advection: true,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
   const [dualMode, setDualMode] = useState(false)
@@ -592,6 +647,11 @@ export default function MapPage() {
   const [publicError, setPublicError] = useState<string | null>(null)
   const [weather, setWeather] = useState<WeatherNow | null>(null)
   const [selectedSido, setSelectedSido] = useState('')
+  const windLayerRef = useRef<WindLayer | null>(null)
+  const [windField, setWindField] = useState<WindFieldResponse | null>(null)
+  const [advection, setAdvection] = useState<AdvectionResponse | null>(null)
+  /** 0 = +1시간 예보 … 5 = +6시간 예보 */
+  const [hourOffset, setHourOffset] = useState(0)
 
   /** 공공(AirKorea) 실시간 대기질 + 지역 기상 로드 — 자체 데이터 오류와 분리해 처리 */
   const loadPublicAir = async (sido?: string) => {
@@ -651,6 +711,22 @@ export default function MapPage() {
       }
     } catch {
       ds.odor.entities.removeAll()
+    }
+  }
+
+  /** 바람장 + 이류 예측 로드 (인천권 고정, 실패해도 다른 레이어 무영향) */
+  const loadWind = async () => {
+    try {
+      const res = await apiClient.get<ApiResponse<WindFieldResponse>>('/wind/field')
+      setWindField(res.data.data.hours.length > 0 ? res.data.data : null)
+    } catch {
+      setWindField(null)
+    }
+    try {
+      const res = await apiClient.get<ApiResponse<AdvectionResponse>>('/wind/advection?hours=6')
+      setAdvection(res.data.data)
+    } catch {
+      setAdvection(null)
     }
   }
 
@@ -857,6 +933,10 @@ export default function MapPage() {
       idwSurface: new Cesium.CustomDataSource('idwSurface'),
       alertRegion: new Cesium.CustomDataSource('alertRegion'),
       odor: new Cesium.CustomDataSource('odor'),
+      // wind 데이터소스는 Record<LayerKey, …> 타입을 만족시키기 위한 자리로
+      // 엔티티는 넣지 않는다 — 파티클은 WindLayer가 직접 그린다.
+      wind: new Cesium.CustomDataSource('wind'),
+      advection: new Cesium.CustomDataSource('advection'),
     }
     Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
@@ -893,8 +973,10 @@ export default function MapPage() {
     loadPublicAir()
     loadAlerts()
     loadOdor()
+    loadWind()
 
     return () => {
+      windLayerRef.current = null // viewer.destroy()가 프리미티브를 함께 정리한다
       viewer.destroy()
       viewerRef.current = null
       dataSourcesRef.current = null
@@ -910,7 +992,37 @@ export default function MapPage() {
     ;(Object.keys(layers) as LayerKey[]).forEach((key) => {
       ds[key].show = layers[key]
     })
+    if (windLayerRef.current) windLayerRef.current.show = layers.wind
   }, [layers])
+
+  // 바람길 파티클 레이어: 데이터 로드 시 생성, 시간 변경 시 데이터 교체
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !windField) return
+    const data = toWindData(windField, Math.min(hourOffset, windField.hours.length - 1))
+    if (!windLayerRef.current) {
+      // as const로 readonly가 된 colors를 mutable 배열로 복사해 전달
+      const layer = new WindLayer(viewer, data,
+        { ...MAP_CONFIG.windLayer, colors: [...MAP_CONFIG.windLayer.colors] })
+      layer.show = layers.wind
+      windLayerRef.current = layer
+    } else {
+      windLayerRef.current.updateWindData(data)
+    }
+    // layers.wind는 위의 표시/숨김 effect가 관리 — 여기 의존성에 넣지 않는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windField, hourOffset])
+
+  // 이류 예측 표면: 데이터 로드·시간 변경 시 해당 프레임 재렌더
+  useEffect(() => {
+    const ds = dataSourcesRef.current
+    if (!ds) return
+    if (!advection) {
+      ds.advection.entities.removeAll()
+      return
+    }
+    addAdvectionFrame(ds.advection, advection, hourOffset)
+  }, [advection, hourOffset])
 
   useEffect(() => {
     sitesRef.current = sites
@@ -1398,6 +1510,41 @@ export default function MapPage() {
         <p className="rounded-md bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
           공공 대기질 데이터를 불러오지 못했습니다: {publicError} (자체 관측 레이어는 정상 표시)
         </p>
+      )}
+
+      {/* 바람·이동 예측 시간 컨트롤 */}
+      {windField && (layers.wind || layers.advection) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm">
+          <span className="font-medium text-gray-700">바람·이동 예측</span>
+          <input
+            type="range"
+            min={0}
+            max={windField.hours.length - 1}
+            value={Math.min(hourOffset, windField.hours.length - 1)}
+            onChange={(e) => setHourOffset(Number(e.target.value))}
+            className="w-40"
+          />
+          <span className="text-gray-700">
+            +{Math.min(hourOffset, windField.hours.length - 1) + 1}시간 (
+            {new Date(windField.hours[
+              Math.min(hourOffset, windField.hours.length - 1)].time)
+              .toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 예보)
+          </span>
+          {layers.advection && advection && (
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700"
+              title="바람에 의한 이동만 반영한 추정입니다. 확산·배출·침적은 포함하지 않습니다.">
+              단순 이류 추정
+            </span>
+          )}
+          {windField.mock && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+              Mock 바람 데이터 (균일 바람장)
+            </span>
+          )}
+          <span className="text-xs text-gray-400">
+            기상청 초단기예보 기반 · 인천권 격자 {windField.width}×{windField.height}
+          </span>
+        </div>
       )}
 
       {/* 시계열 컨트롤 */}
