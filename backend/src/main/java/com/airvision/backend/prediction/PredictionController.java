@@ -28,9 +28,12 @@ import org.springframework.web.multipart.MultipartFile;
 public class PredictionController {
 
     private final PredictionService predictionService;
+    private final CctvEstimateService cctvEstimateService;
 
-    public PredictionController(PredictionService predictionService) {
+    public PredictionController(PredictionService predictionService,
+                                CctvEstimateService cctvEstimateService) {
         this.predictionService = predictionService;
+        this.cctvEstimateService = cctvEstimateService;
     }
 
     @Operation(summary = "AI 예측 실행",
@@ -49,6 +52,23 @@ public class PredictionController {
         }
         return ApiResponse.ok(predictionService.run(
                 siteId, modelName, image, temperature, humidity, windSpeed));
+    }
+
+    @Operation(summary = "CCTV 이미지 기반 미세먼지·가시거리 추정",
+            description = "주간엔 AI 이미지 추론, 야간(태양고도<0도)엔 최근접 실측으로 대체. "
+                    + "결과는 저장하지 않는 즉시 추정이다")
+    @PostMapping(value = "/cctv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<com.airvision.backend.prediction.dto.CctvEstimateResponse> cctv(
+            @RequestParam Long siteId,
+            @RequestParam(defaultValue = "resnet18_multimodal_v1") String modelName,
+            @RequestPart MultipartFile image,
+            @RequestParam double temperature,
+            @RequestParam @DecimalMin("0") @DecimalMax("100") double humidity) {
+        if (image.isEmpty()) {
+            throw new IllegalArgumentException("이미지 파일이 비어 있습니다");
+        }
+        return ApiResponse.ok(cctvEstimateService.estimate(
+                siteId, modelName, image, temperature, humidity));
     }
 
     @Operation(summary = "예측 결과 목록 조회 (최신순, 관측소·구 필터)")
