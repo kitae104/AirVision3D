@@ -27,7 +27,7 @@
 
 ### 4.1 Backend — `publicdata/wind/` 패키지 (신규)
 
-- **격자점 정의**: 3구 bounding box(대략 lon 126.60~126.80, lat 37.36~37.50)를 덮는 KMA 격자점 약 3×3=9개를 상수/설정으로 고정 정의.
+- **격자점 정의**: 인천권 bounding box(lon 126.45~126.95, lat 37.25~37.60)를 덮는 KMA 격자 샘플 지점 3×3=9개를 상수로 고정 정의. 3구만 덮으면 도메인이 너무 작아(약 20km) 이류 계산 시 1시간 만에 경계 유입이 지배하므로, 상류(주변부)를 포함한 인천권으로 영역을 넓힌다.
 - **`WindFieldService`**
   - 각 격자점에 대해 초단기예보를 호출해 시간별(발표 기준 +6h) UV 성분을 수집한다.
   - 9개 coarse 격자점 → 정규 위경도 격자(약 25×25)로 IDW 보간해 `cesium-wind-layer` 입력 형식으로 변환한다.
@@ -40,7 +40,7 @@
 - **API**
   - `GET /api/wind/field` → `{ bounds, width, height, hours: [{ time, u[], v[], speedMin, speedMax }] }`
   - `GET /api/wind/advection?hours=6` → `{ bounds, width, height, model, frames: [{ time, pm25[] }] }`
-- **Mock**: `fixtures/kma/raw/ultra_fcst.json`을 다중 격자점 형태로 확장(또는 격자점별 변형 생성)해 서비스키 없이도 전체 기능이 동작하게 한다.
+- **Mock**: 기존 `fixtures/kma/raw/ultra_fcst.json`을 그대로 재사용한다. Mock 모드에서는 모든 격자점이 동일 응답을 받아 균일 바람장이 되지만, 파티클 애니메이션·이류 계산·API 계약 검증에는 충분하다 (알려진 한계로 기록).
 
 ### 4.2 Frontend — MapPage
 
