@@ -72,8 +72,8 @@ public class AdvectionService {
                 wind.mock() || current.mock(), frames);
     }
 
-    /** 좌표·측정값이 유효한 측정소만 IDW 소스로 변환. */
-    private static List<IdwInterpolator.SourcePoint> sources(
+    /** 좌표·측정값이 유효한 측정소만 IDW 소스로 변환. (DistrictForecastService에서도 재사용) */
+    static List<IdwInterpolator.SourcePoint> sources(
             CurrentAirQualityResponse current,
             Function<StationAirQuality, PollutantValue> pollutant) {
         List<IdwInterpolator.SourcePoint> result = new ArrayList<>();
