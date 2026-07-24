@@ -25,4 +25,14 @@ public final class WindUtils {
     public static double arrowHeadingDeg(double meteorologicalDeg) {
         return (((meteorologicalDeg + 180) % 360) + 360) % 360;
     }
+
+    /** 기상학적 풍향(불어오는 방향)·풍속 → 동서 성분 U (m/s, 동쪽 양수). */
+    public static double toU(double speedMs, double meteorologicalDeg) {
+        return -speedMs * Math.sin(Math.toRadians(meteorologicalDeg));
+    }
+
+    /** 기상학적 풍향(불어오는 방향)·풍속 → 남북 성분 V (m/s, 북쪽 양수). */
+    public static double toV(double speedMs, double meteorologicalDeg) {
+        return -speedMs * Math.cos(Math.toRadians(meteorologicalDeg));
+    }
 }
