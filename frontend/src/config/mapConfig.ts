@@ -34,6 +34,8 @@ export const MAP_CONFIG = {
     idwSurface: '#14b8a6',
     alertRegion: '#dc2626',
     odor: '#a16207',
+    wind: '#06b6d4',
+    advection: '#64748b',
   },
 
   /** 경보 발령 시도 강조 (반투명 원) */
@@ -64,5 +66,20 @@ export const MAP_CONFIG = {
     /** 표시 고도 (m) */
     altitudeM: 80,
     color: '#0891b2',
+  },
+
+  /** 바람길 파티클 애니메이션 (cesium-wind-layer) */
+  windLayer: {
+    /** 파티클 수 = size² (100 → 10,000개) */
+    particlesTextureSize: 100,
+    /** 파티클 표시 고도 (m) */
+    particleHeight: 120,
+    speedFactor: 0.5,
+    lineWidth: { min: 1, max: 2.5 },
+    lineLength: { min: 30, max: 120 },
+    dropRate: 0.003,
+    dropRateBump: 0.001,
+    /** 풍속 저→고 색상 램프 (Windy 스타일) */
+    colors: ['#3b82f6', '#22d3ee', '#4ade80', '#facc15', '#fb923c', '#ef4444'],
   },
 } as const

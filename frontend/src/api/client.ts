@@ -311,6 +311,40 @@ export interface IdwGridResponse {
   cells: IdwGridCell[]
 }
 
+export interface WindFieldHour {
+  time: string
+  u: number[]
+  v: number[]
+  speedMin: number
+  speedMax: number
+}
+
+export interface WindFieldResponse {
+  bounds: { west: number; south: number; east: number; north: number }
+  width: number
+  height: number
+  baseTime: string | null
+  source: string
+  mock: boolean
+  stale: boolean
+  hours: WindFieldHour[]
+}
+
+export interface AdvectionFrame {
+  time: string
+  pm25: number[]
+  pm10: number[] | null
+}
+
+export interface AdvectionResponse {
+  bounds: { west: number; south: number; east: number; north: number }
+  width: number
+  height: number
+  model: string
+  mock: boolean
+  frames: AdvectionFrame[]
+}
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 
