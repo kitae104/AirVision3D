@@ -46,11 +46,11 @@ class WindFieldServiceTest {
 
         WindFieldResponse field = service.field();
 
-        assertThat(field.width()).isEqualTo(25);
-        assertThat(field.height()).isEqualTo(25);
+        assertThat(field.width()).isEqualTo(40);
+        assertThat(field.height()).isEqualTo(20);
         assertThat(field.hours()).hasSize(2);
         WindFieldResponse.HourField h0 = field.hours().get(0);
-        assertThat(h0.u()).hasSize(25 * 25);
+        assertThat(h0.u()).hasSize(40 * 20);
         // 전 격자점 동일 응답 → 균일 바람장: 모든 셀 u=3.0, v=-1.0
         assertThat(h0.u().get(0)).isCloseTo(3.0, org.assertj.core.data.Offset.offset(1e-6));
         assertThat(h0.v().get(312)).isCloseTo(-1.0, org.assertj.core.data.Offset.offset(1e-6));

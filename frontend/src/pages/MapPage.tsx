@@ -438,7 +438,7 @@ function addWindArrows(ds: Cesium.CustomDataSource, field: WindFieldResponse,
           <tr><th>풍속</th><td><b>${speed.toFixed(1)}</b> m/s</td></tr>
           <tr><th>이동 방향</th><td>${headingText16(headingDeg)}쪽 (${headingDeg.toFixed(0)}°)</td></tr>
           <tr><th>예보 시각</th><td>${new Date(hour.time).toLocaleString('ko-KR')}</td></tr>
-          <tr><th>출처</th><td>기상청 초단기예보 바람장 (수도권 격자)</td></tr>
+          <tr><th>출처</th><td>기상청 초단기예보 바람장 (중부권 서해~동해 격자)</td></tr>
           </tbody></table>`,
       })
     }
@@ -1614,7 +1614,7 @@ export default function MapPage() {
             </span>
           )}
           <span className="text-xs text-gray-400">
-            기상청 초단기예보 기반 · 수도권(서울·인천·경기) 격자 {windField.width}×{windField.height}
+            기상청 초단기예보 기반 · 중부권(서해~동해) 격자 {windField.width}×{windField.height}
           </span>
         </div>
       )}

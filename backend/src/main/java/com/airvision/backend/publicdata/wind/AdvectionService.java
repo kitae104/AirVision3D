@@ -20,7 +20,7 @@ import org.springframework.stereotype.Service;
  * 현재 미세먼지 분포(AirKorea 실측 IDW)를 바람장으로 이동시키는 semi-Lagrangian 이류 예측.
  * 확산·배출·침적은 포함하지 않는 순수 이류(advection-only) 모델이다.
  * PM2.5를 기본으로 하고, 유효한 PM10 실측이 있으면 같은 바람장으로 PM10도 병행 이류한다.
- * 도메인이 수도권으로 넓어도 강풍이 지속되면 경계 유입값(clamp)이 수 시간 내 지배하는 한계가 있다.
+ * 도메인이 중부권(서해~동해)으로 넓어도 강풍이 지속되면 경계 유입값(clamp)이 수 시간 내 지배하는 한계가 있다.
  */
 @Service
 public class AdvectionService {
@@ -31,8 +31,8 @@ public class AdvectionService {
     static final double IDW_POWER = 2.0;
     static final double M_PER_DEG_LAT = 111_320.0;
     static final double STEP_SECONDS = 3600.0;
-    /** 수도권 도메인 초기 농도장에 쓰는 실측 시도 (일부 실패해도 나머지로 계속). */
-    static final List<String> SIDOS = List.of("인천", "서울", "경기");
+    /** 중부권(서해~동해) 도메인 초기 농도장에 쓰는 실측 시도 (일부 실패해도 나머지로 계속). */
+    static final List<String> SIDOS = List.of("인천", "서울", "경기", "강원", "충북", "충남");
 
     private final WindFieldService windFieldService;
     private final AirKoreaService airKoreaService;
@@ -81,7 +81,7 @@ public class AdvectionService {
     }
 
     /**
-     * 인천·서울·경기 실측을 병합해 수도권 초기 농도장 소스를 만든다.
+     * 인천·서울·경기·강원·충북·충남 실측을 병합해 중부권 초기 농도장 소스를 만든다.
      * 측정소명 기준으로 중복을 제거하고, 일부 시도 조회가 실패해도 나머지로 진행한다.
      */
     private CurrentAirQualityResponse mergedCurrent() {
@@ -113,7 +113,7 @@ public class AdvectionService {
             throw lastError != null ? lastError
                     : new IllegalStateException("실시간 대기질을 조회할 수 없습니다");
         }
-        return new CurrentAirQualityResponse("수도권", first.source(), mock,
+        return new CurrentAirQualityResponse("중부권", first.source(), mock,
                 first.stale(), first.collectedAt(), first.message(), stations);
     }
 

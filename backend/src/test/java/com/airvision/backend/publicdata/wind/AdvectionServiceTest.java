@@ -135,12 +135,11 @@ class AdvectionServiceTest {
                 BOUNDS, w, h, Instant.parse("2026-07-18T05:30:00Z"), "KMA", true, false,
                 List.of(new WindFieldResponse.HourField(
                         Instant.parse("2026-07-18T06:00:00Z"), calm, calm, 0, 0))));
-        when(airKoreaService.current(org.mockito.ArgumentMatchers.eq("인천")))
-                .thenThrow(new IllegalStateException("인천 조회 실패"));
+        // 서울만 성공하고 나머지 시도(인천·경기·강원·충북·충남)는 모두 실패
+        when(airKoreaService.current(anyString()))
+                .thenThrow(new IllegalStateException("시도 조회 실패"));
         when(airKoreaService.current(org.mockito.ArgumentMatchers.eq("서울")))
                 .thenReturn(current(station(37.5, 126.5, 30.0, 55.0)));
-        when(airKoreaService.current(org.mockito.ArgumentMatchers.eq("경기")))
-                .thenThrow(new IllegalStateException("경기 조회 실패"));
 
         AdvectionResponse response =
                 new AdvectionService(windFieldService, airKoreaService).advect(1);

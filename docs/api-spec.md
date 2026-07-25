@@ -63,8 +63,8 @@
 ### 바람장 / 확산(이류) 예측 (Phase 28)
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | /api/wind/field | 수도권(126.30~127.85, 36.90~38.10) 25×25 시간별 바람장 {bounds, width, height, baseTime, mock, stale, hours[{time, u[], v[], speedMin, speedMax}]}. 기상청 초단기예보 UUU/VVV(+6h), 내륙 샘플 18지점 IDW, row 0=남쪽 row-major |
-| GET | /api/wind/advection?hours=6 | PM2.5·PM10 단순 이류 예측 (semi-Lagrangian, advection-only, 1~6시간) {bounds, width, height, model, mock, frames[{time, pm25[], pm10[]?}]}. 초기장은 AirKorea 인천·서울·경기 실측 IDW(일부 시도 실패 허용) |
+| GET | /api/wind/field | 중부권 서해~동해(125.70~129.50, 36.90~38.10) 40×20 시간별 바람장 {bounds, width, height, baseTime, mock, stale, hours[{time, u[], v[], speedMin, speedMax}]}. 기상청 초단기예보 UUU/VVV(+6h), 내륙·도서 샘플 29지점 IDW, row 0=남쪽 row-major |
+| GET | /api/wind/advection?hours=6 | PM2.5·PM10 단순 이류 예측 (semi-Lagrangian, advection-only, 1~6시간) {bounds, width, height, model, mock, frames[{time, pm25[], pm10[]?}]}. 초기장은 AirKorea 인천·서울·경기·강원·충북·충남 실측 IDW(일부 시도 실패 허용) |
 | GET | /api/air-quality/district-forecast?hours=6 | 미추홀·남동·연수 구별 요약: current[{district, pm25, pm10, wind{speedMs, directionDeg, directionText, movementText}}] + hourly[{time, districts[...]}]. 기존 /api/air-quality/forecast(예보통보)와 별개 |
 
 ### 악취 모니터링

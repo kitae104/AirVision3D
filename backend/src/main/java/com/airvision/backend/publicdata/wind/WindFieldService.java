@@ -23,14 +23,15 @@ import java.util.TreeMap;
 import org.springframework.stereotype.Service;
 
 /**
- * 수도권(서울·인천·경기) KMA 격자점들의 초단기예보 바람(UUU/VVV)을 수집해
- * 25×25 정규 위경도 격자로 IDW 보간한 시간별 바람장을 만든다.
+ * 중부권(서해~동해) KMA 격자점들의 초단기예보 바람(UUU/VVV)을 수집해
+ * 40×20 정규 위경도 격자로 IDW 보간한 시간별 바람장을 만든다.
+ * 가로(경도) 폭이 세로의 약 3배라 셀이 정사각에 가깝도록 40×20을 쓴다.
  */
 @Service
 public class WindFieldService {
 
-    static final int WIDTH = 25;
-    static final int HEIGHT = 25;
+    static final int WIDTH = 40;
+    static final int HEIGHT = 20;
     static final double IDW_POWER = 2.0;
 
     private final KmaWeatherClient client;
@@ -125,7 +126,7 @@ public class WindFieldService {
         return result;
     }
 
-    /** 샘플 지점 → 25×25 정규 격자 IDW 보간 (row 0 = 남쪽). */
+    /** 샘플 지점 → 40×20 정규 격자 IDW 보간 (row 0 = 남쪽). */
     private static WindFieldResponse.HourField interpolateHour(
             Instant time, List<IdwInterpolator.SourcePoint> uSrc,
             List<IdwInterpolator.SourcePoint> vSrc) {
