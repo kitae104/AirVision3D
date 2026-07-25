@@ -124,6 +124,50 @@ class AdvectionServiceTest {
         assertThat(response.frames().get(0).pm10()).isNull();
     }
 
+    @Test
+    void 일부_시도_조회가_실패해도_나머지_시도_실측으로_예측한다() {
+        WindFieldService windFieldService = mock(WindFieldService.class);
+        AirKoreaService airKoreaService = mock(AirKoreaService.class);
+        int w = 5;
+        int h = 5;
+        List<Double> calm = Collections.nCopies(w * h, 0.0);
+        when(windFieldService.field()).thenReturn(new WindFieldResponse(
+                BOUNDS, w, h, Instant.parse("2026-07-18T05:30:00Z"), "KMA", true, false,
+                List.of(new WindFieldResponse.HourField(
+                        Instant.parse("2026-07-18T06:00:00Z"), calm, calm, 0, 0))));
+        when(airKoreaService.current(org.mockito.ArgumentMatchers.eq("인천")))
+                .thenThrow(new IllegalStateException("인천 조회 실패"));
+        when(airKoreaService.current(org.mockito.ArgumentMatchers.eq("서울")))
+                .thenReturn(current(station(37.5, 126.5, 30.0, 55.0)));
+        when(airKoreaService.current(org.mockito.ArgumentMatchers.eq("경기")))
+                .thenThrow(new IllegalStateException("경기 조회 실패"));
+
+        AdvectionResponse response =
+                new AdvectionService(windFieldService, airKoreaService).advect(1);
+
+        assertThat(response.frames()).hasSize(1);
+        assertThat(response.frames().get(0).pm25().get(12))
+                .isCloseTo(30.0, org.assertj.core.data.Offset.offset(0.11));
+    }
+
+    @Test
+    void 모든_시도_조회가_실패하면_오류를_전파한다() {
+        WindFieldService windFieldService = mock(WindFieldService.class);
+        AirKoreaService airKoreaService = mock(AirKoreaService.class);
+        List<Double> calm = Collections.nCopies(25, 0.0);
+        when(windFieldService.field()).thenReturn(new WindFieldResponse(
+                BOUNDS, 5, 5, Instant.parse("2026-07-18T05:30:00Z"), "KMA", true, false,
+                List.of(new WindFieldResponse.HourField(
+                        Instant.parse("2026-07-18T06:00:00Z"), calm, calm, 0, 0))));
+        when(airKoreaService.current(anyString()))
+                .thenThrow(new IllegalStateException("전체 장애"));
+
+        assertThatThrownBy(() ->
+                new AdvectionService(windFieldService, airKoreaService).advect(1))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("전체 장애");
+    }
+
     private static CurrentAirQualityResponse current(StationAirQuality... stations) {
         return new CurrentAirQualityResponse("인천", "AirKorea", true, false,
                 Instant.parse("2026-07-18T05:00:00Z"), null, List.of(stations));

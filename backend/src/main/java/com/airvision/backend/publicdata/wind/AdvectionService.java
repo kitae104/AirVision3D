@@ -8,23 +8,31 @@ import com.airvision.backend.publicdata.airkorea.dto.StationAirQuality;
 import com.airvision.backend.publicdata.wind.dto.AdvectionResponse;
 import com.airvision.backend.publicdata.wind.dto.WindFieldResponse;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
  * 현재 미세먼지 분포(AirKorea 실측 IDW)를 바람장으로 이동시키는 semi-Lagrangian 이류 예측.
  * 확산·배출·침적은 포함하지 않는 순수 이류(advection-only) 모델이다.
  * PM2.5를 기본으로 하고, 유효한 PM10 실측이 있으면 같은 바람장으로 PM10도 병행 이류한다.
- * 도메인이 작아 강풍 시 경계 유입값(clamp)이 수 시간 내 지배하는 한계가 있다.
+ * 도메인이 수도권으로 넓어도 강풍이 지속되면 경계 유입값(clamp)이 수 시간 내 지배하는 한계가 있다.
  */
 @Service
 public class AdvectionService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdvectionService.class);
 
     static final String MODEL = "advection-only";
     static final double IDW_POWER = 2.0;
     static final double M_PER_DEG_LAT = 111_320.0;
     static final double STEP_SECONDS = 3600.0;
+    /** 수도권 도메인 초기 농도장에 쓰는 실측 시도 (일부 실패해도 나머지로 계속). */
+    static final List<String> SIDOS = List.of("인천", "서울", "경기");
 
     private final WindFieldService windFieldService;
     private final AirKoreaService airKoreaService;
@@ -42,7 +50,7 @@ public class AdvectionService {
         if (wind.hours().isEmpty()) {
             throw new IllegalStateException("바람 예보가 없어 이동 예측을 할 수 없습니다");
         }
-        CurrentAirQualityResponse current = airKoreaService.current("인천");
+        CurrentAirQualityResponse current = mergedCurrent();
         List<IdwInterpolator.SourcePoint> pm25Sources =
                 sources(current, StationAirQuality::pm25);
         List<IdwInterpolator.SourcePoint> pm10Sources =
@@ -70,6 +78,43 @@ public class AdvectionService {
         }
         return new AdvectionResponse(b, w, h, MODEL,
                 wind.mock() || current.mock(), frames);
+    }
+
+    /**
+     * 인천·서울·경기 실측을 병합해 수도권 초기 농도장 소스를 만든다.
+     * 측정소명 기준으로 중복을 제거하고, 일부 시도 조회가 실패해도 나머지로 진행한다.
+     */
+    private CurrentAirQualityResponse mergedCurrent() {
+        List<StationAirQuality> stations = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        CurrentAirQualityResponse first = null;
+        boolean mock = false;
+        RuntimeException lastError = null;
+        for (String sido : SIDOS) {
+            CurrentAirQualityResponse res;
+            try {
+                res = airKoreaService.current(sido);
+            } catch (RuntimeException e) {
+                log.warn("{} 실시간 대기질 조회 실패 — 나머지 시도로 계속: {}", sido, e.getMessage());
+                lastError = e;
+                continue;
+            }
+            if (first == null) {
+                first = res;
+            }
+            mock = mock || res.mock();
+            for (StationAirQuality s : res.stations()) {
+                if (seen.add(s.stationName())) {
+                    stations.add(s);
+                }
+            }
+        }
+        if (first == null) {
+            throw lastError != null ? lastError
+                    : new IllegalStateException("실시간 대기질을 조회할 수 없습니다");
+        }
+        return new CurrentAirQualityResponse("수도권", first.source(), mock,
+                first.stale(), first.collectedAt(), first.message(), stations);
     }
 
     /** 좌표·측정값이 유효한 측정소만 IDW 소스로 변환. (DistrictForecastService에서도 재사용) */

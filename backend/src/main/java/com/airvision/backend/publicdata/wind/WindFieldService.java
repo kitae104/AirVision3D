@@ -23,7 +23,7 @@ import java.util.TreeMap;
 import org.springframework.stereotype.Service;
 
 /**
- * 인천권 KMA 격자점들의 초단기예보 바람(UUU/VVV)을 수집해
+ * 수도권(서울·인천·경기) KMA 격자점들의 초단기예보 바람(UUU/VVV)을 수집해
  * 25×25 정규 위경도 격자로 IDW 보간한 시간별 바람장을 만든다.
  */
 @Service
