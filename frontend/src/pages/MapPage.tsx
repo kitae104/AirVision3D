@@ -445,12 +445,40 @@ function addWindArrows(ds: Cesium.CustomDataSource, field: WindFieldResponse,
   }
 }
 
-/** 이류 예측 프레임 1개를 셀 타일링으로 렌더 (addIdwSurface와 동일한 표현 방식) */
+/** PM2.5 농도 → 등급색 사이를 연속 보간한 색 (등급 대역 중앙 = 순수 등급색).
+ *  좁은 농도 범위에서도 셀 간 차이가 색으로 드러나도록 이산 등급색 대신 그라데이션을 쓴다. */
+const PM25_RAMP_STOPS: Array<[number, string]> = [
+  [7.5, GRADES[0].chart],   // 좋음(0~15) 중앙
+  [25, GRADES[1].chart],    // 보통(15~35) 중앙
+  [55, GRADES[2].chart],    // 나쁨(35~75) 중앙
+  [90, GRADES[3].chart],    // 매우나쁨(75~) 대표값
+]
+function pm25RampColor(pm25: number, alpha: number): Cesium.Color {
+  const stops = PM25_RAMP_STOPS
+  if (pm25 <= stops[0][0]) return Cesium.Color.fromCssColorString(stops[0][1]).withAlpha(alpha)
+  for (let i = 1; i < stops.length; i++) {
+    if (pm25 <= stops[i][0]) {
+      const t = (pm25 - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0])
+      return Cesium.Color.lerp(
+        Cesium.Color.fromCssColorString(stops[i - 1][1]),
+        Cesium.Color.fromCssColorString(stops[i][1]),
+        t, new Cesium.Color()).withAlpha(alpha)
+    }
+  }
+  return Cesium.Color.fromCssColorString(stops[stops.length - 1][1]).withAlpha(alpha)
+}
+
+/**
+ * 이류 예측 프레임 1개를 3D 농도 기둥으로 렌더.
+ * 높이·색이 농도에 비례하고 기둥 사이 틈으로 지도가 보여,
+ * 슬라이더를 움직이면 농도 덩어리가 바람을 따라 이동하는 모습이 입체적으로 읽힌다.
+ */
 function addAdvectionFrame(ds: Cesium.CustomDataSource, resp: AdvectionResponse,
                            frameIndex: number) {
   ds.entities.removeAll()
   const frame = resp.frames[Math.min(frameIndex, resp.frames.length - 1)]
   if (!frame) return
+  const cfg = MAP_CONFIG.advectionGrid
   const cellLatDeg = (resp.bounds.north - resp.bounds.south) / resp.height
   const cellLonDeg = (resp.bounds.east - resp.bounds.west) / resp.width
   const mPerDegLat = 111_320
@@ -462,18 +490,22 @@ function addAdvectionFrame(ds: Cesium.CustomDataSource, resp: AdvectionResponse,
       const pm25 = frame.pm25[row * resp.width + col]
       const pm10 = frame.pm10 ? frame.pm10[row * resp.width + col] : null
       const lon = resp.bounds.west + (col + 0.5) * cellLonDeg
+      const heightM = Math.min(
+        Math.max(pm25 * cfg.heightPerUnit, cfg.minHeightM), cfg.maxHeightM)
       ds.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(lon, lat, 40),
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, heightM / 2),
         box: {
           dimensions: new Cesium.Cartesian3(
-            cellLonDeg * mPerDegLon, cellLatDeg * mPerDegLat, 60),
-          material: pm25Color(pm25, 0.4),
+            cellLonDeg * mPerDegLon * cfg.footprintRatio,
+            cellLatDeg * mPerDegLat * cfg.footprintRatio, heightM),
+          material: pm25RampColor(pm25, cfg.alpha),
         },
         name: 'PM2.5 이동 예측',
         description: `<table class="cesium-infoBox-defaultTable"><tbody>
           <tr><th>예측 PM2.5</th><td><b>${pm25.toFixed(1)}</b> ㎍/㎥ (${gradeOf(pm25).name})</td></tr>
           ${pm10 != null ? `<tr><th>예측 PM10</th><td><b>${pm10.toFixed(1)}</b> ㎍/㎥</td></tr>` : ''}
           <tr><th>예측 시각</th><td>${timeText}</td></tr>
+          <tr><th>표현</th><td>기둥 높이·색 = 예측 농도</td></tr>
           <tr><th>방식</th><td>단순 이류 추정 (바람 이동만 반영, 확산·배출 미포함)</td></tr>
           </tbody></table>`,
       })
