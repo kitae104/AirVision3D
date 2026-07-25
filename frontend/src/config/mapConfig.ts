@@ -36,6 +36,7 @@ export const MAP_CONFIG = {
     odor: '#a16207',
     wind: '#06b6d4',
     advection: '#64748b',
+    cctv: '#f43f5e',
   },
 
   /** 경보 발령 시도 강조 (반투명 원) */

@@ -4,8 +4,10 @@ import { WindLayer } from 'cesium-wind-layer'
 import type { WindData } from 'cesium-wind-layer'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
+import Hls from 'hls.js'
 import type {
-  AdvectionResponse, AirAlert, ApiResponse, CurrentAirQuality, IdwGridResponse,
+  AdvectionResponse, AirAlert, ApiResponse, CctvCamera, CctvStreamsResponse,
+  CurrentAirQuality, IdwGridResponse,
   InterpolationResult, OdorResponse, OdorSpot, PageResponse, PollutantValue, Prediction,
   PublicStationAir, Site, WeatherNow, WindFieldResponse,
 } from '../api/client'
@@ -57,7 +59,7 @@ interface PublicSeriesStation {
 
 type LayerKey =
   | 'observation' | 'prediction' | 'interpolation' | 'airkorea' | 'idwSurface' | 'alertRegion'
-  | 'odor' | 'wind' | 'advection'
+  | 'odor' | 'wind' | 'advection' | 'cctv'
 
 const LAYER_LABELS: Record<LayerKey, string> = {
   observation: '관측값',
@@ -69,6 +71,7 @@ const LAYER_LABELS: Record<LayerKey, string> = {
   odor: '악취 측정(인천)',
   wind: '바람길 (기상청 예보)',
   advection: 'PM2.5 이동 예측',
+  cctv: '실시간 CCTV(인천 3구)',
 }
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
@@ -513,6 +516,125 @@ function addAdvectionFrame(ds: Cesium.CustomDataSource, resp: AdvectionResponse,
   }
 }
 
+/** 실시간 CCTV 카메라 마커. 클릭 시 InfoBox 대신 재생 모달을 연다 (selectedEntityChanged에서 처리) */
+function addCctvCamera(ds: Cesium.CustomDataSource, cam: CctvCamera, mock: boolean) {
+  ds.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(cam.longitude, cam.latitude, 25),
+    point: {
+      pixelSize: 11,
+      color: Cesium.Color.fromCssColorString(MAP_CONFIG.markers.cctv).withAlpha(0.95),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+    },
+    label: {
+      text: `📹 ${cam.name.replace(/^\[Mock\] /, '')}`,
+      font: '12px sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      pixelOffset: new Cesium.Cartesian2(0, -14),
+      distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 60_000),
+    },
+    name: `${cam.name} (CCTV)`,
+    properties: { cctvCamera: cam, cctvMock: mock },
+  })
+}
+
+/** 실시간 CCTV 재생 모달 (HLS). 확대/축소 토글 + 브라우저 전체화면 지원 */
+function CctvPlayerModal({ camera, mock, onClose }: {
+  camera: CctvCamera
+  mock: boolean
+  onClose: () => void
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [large, setLarge] = useState(false)
+  const [streamError, setStreamError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !camera.streamUrl) return
+    setStreamError(null)
+    // Safari 등 HLS 네이티브 지원 브라우저는 src 직접 재생
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = camera.streamUrl
+      video.play().catch(() => {})
+      return () => {
+        video.removeAttribute('src')
+        video.load()
+      }
+    }
+    if (!Hls.isSupported()) {
+      setStreamError('이 브라우저에서는 HLS 스트림 재생을 지원하지 않습니다')
+      return
+    }
+    const hls = new Hls()
+    hls.loadSource(camera.streamUrl)
+    hls.attachMedia(video)
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play().catch(() => {})
+    })
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) {
+        setStreamError('스트림을 재생할 수 없습니다 (네트워크 또는 스트림 오류)')
+      }
+    })
+    return () => hls.destroy()
+  }, [camera])
+
+  const buttonClass =
+    'rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100'
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className={`w-full rounded-lg bg-white p-4 shadow-xl ${large ? 'max-w-6xl' : 'max-w-2xl'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-bold text-gray-900">📹 {camera.name}</h3>
+            <p className="text-xs text-gray-500">
+              {camera.district} · ITS 국가교통정보센터 실시간 도로 CCTV
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button className={buttonClass} onClick={() => setLarge(!large)}>
+              {large ? '창 축소' : '창 확대'}
+            </button>
+            <button
+              className={buttonClass}
+              onClick={() => videoRef.current?.requestFullscreen().catch(() => {})}
+            >
+              전체화면
+            </button>
+            <button className={buttonClass} onClick={onClose}>닫기</button>
+          </div>
+        </div>
+        {camera.streamUrl && !streamError ? (
+          <video
+            ref={videoRef}
+            controls
+            muted
+            autoPlay
+            playsInline
+            className="aspect-video w-full rounded bg-black"
+          />
+        ) : (
+          <div className="flex aspect-video w-full items-center justify-center rounded bg-gray-900 px-6 text-center text-sm text-gray-300">
+            {streamError ?? (mock
+              ? 'Mock 모드입니다. 실제 CCTV 영상은 .env에 ITS_CCTV_KEY 설정 후 표시됩니다.'
+              : '이 카메라의 스트림 주소가 제공되지 않았습니다.')}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const ALERT_ITEM_LABELS: Record<string, string> = {
   PM10: '미세먼지', PM25: '초미세먼지', O3: '오존',
 }
@@ -730,7 +852,9 @@ export default function MapPage() {
     alertRegion: true,
     odor: true,
     wind: true,
-    advection: true,
+    // 이동 예측은 기둥이 화면을 가릴 수 있어 기본 꺼짐 — 필요할 때 켠다 (2026-07-25 사용자 피드백)
+    advection: false,
+    cctv: true,
   })
   const [mode, setMode] = useState<'current' | 'series'>('current')
   const [dualMode, setDualMode] = useState(false)
@@ -753,6 +877,11 @@ export default function MapPage() {
   const [advection, setAdvection] = useState<AdvectionResponse | null>(null)
   /** 0 = +1시간 예보 … 5 = +6시간 예보 */
   const [hourOffset, setHourOffset] = useState(0)
+  /** 관측소 이동 드롭다운 선택값 (최초 로드 시 연수송도 자동 선택) */
+  const [selectedSiteId, setSelectedSiteId] = useState('')
+  /** CCTV 마커 클릭으로 열린 재생 대상 */
+  const [cctvPlayback, setCctvPlayback] =
+    useState<{ camera: CctvCamera; mock: boolean } | null>(null)
 
   /** 공공(AirKorea) 실시간 대기질 + 지역 기상 로드 — 자체 데이터 오류와 분리해 처리 */
   const loadPublicAir = async (sido?: string) => {
@@ -812,6 +941,22 @@ export default function MapPage() {
       }
     } catch {
       ds.odor.entities.removeAll()
+    }
+  }
+
+  /** 실시간 CCTV 목록 로드 → 카메라 마커 (실패해도 다른 레이어 무영향) */
+  const loadCctv = async () => {
+    const ds = dataSourcesRef.current
+    if (!ds) return
+    try {
+      const res = await apiClient.get<ApiResponse<CctvStreamsResponse>>('/cctv/streams')
+      if (dataSourcesRef.current !== ds) return // 응답 대기 중 재마운트 시 중단
+      ds.cctv.entities.removeAll()
+      for (const cam of res.data.data.cameras) {
+        addCctvCamera(ds.cctv, cam, res.data.data.mock)
+      }
+    } catch {
+      ds.cctv.entities.removeAll()
     }
   }
 
@@ -1038,6 +1183,7 @@ export default function MapPage() {
       // (파티클 애니메이션은 WindLayer가 직접 그린다).
       wind: new Cesium.CustomDataSource('wind'),
       advection: new Cesium.CustomDataSource('advection'),
+      cctv: new Cesium.CustomDataSource('cctv'),
     }
     Object.values(dataSources).forEach((d) => viewer.dataSources.add(d))
     dataSourcesRef.current = dataSources
@@ -1070,10 +1216,21 @@ export default function MapPage() {
           setTo(toLocalInput(end))
         }
       })
+    // CCTV 마커 클릭 → InfoBox 대신 영상 재생 모달을 연다
+    viewer.selectedEntityChanged.addEventListener((entity?: Cesium.Entity) => {
+      const time = Cesium.JulianDate.now()
+      const cam = entity?.properties?.cctvCamera?.getValue(time) as CctvCamera | undefined
+      if (!cam) return
+      const mock = entity?.properties?.cctvMock?.getValue(time) === true
+      viewer.selectedEntity = undefined
+      setCctvPlayback({ camera: cam, mock })
+    })
+
     loadCurrent()
     loadPublicAir()
     loadAlerts()
     loadOdor()
+    loadCctv()
     loadWind()
 
     return () => {
@@ -1085,6 +1242,16 @@ export default function MapPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 최초 로드 시 핵심 CCTV 촬영 지점(연수송도)을 기본 선택하고 그 위치로 이동
+  useEffect(() => {
+    if (sites.length === 0 || selectedSiteId) return
+    const songdo = sites.find((s) => s.name.includes('송도'))
+    if (!songdo) return
+    setSelectedSiteId(String(songdo.id))
+    flyToSite(songdo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sites])
 
   // 레이어 표시/숨김
   useEffect(() => {
@@ -1445,11 +1612,12 @@ export default function MapPage() {
         ))}
 
         <select
+          value={selectedSiteId}
           onChange={(e) => {
+            setSelectedSiteId(e.target.value)
             const site = sites.find((s) => s.id === Number(e.target.value))
             if (site) flyToSite(site)
           }}
-          defaultValue=""
           className="rounded-md border border-gray-300 px-3 py-1.5 text-sm"
         >
           <option value="" disabled>
@@ -1721,6 +1889,14 @@ export default function MapPage() {
         공공 측정소의 막대 높이는 오염 농도를 비교하기 위한 시각적 표현입니다. 실제 오염층의
         물리적 높이를 의미하지 않습니다.
       </p>
+
+      {cctvPlayback && (
+        <CctvPlayerModal
+          camera={cctvPlayback.camera}
+          mock={cctvPlayback.mock}
+          onClose={() => setCctvPlayback(null)}
+        />
+      )}
     </div>
   )
 }

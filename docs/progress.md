@@ -41,6 +41,7 @@
 | 29 | 바람길 표현 개선 + 수도권 확장 | COMPLETED | 파티클 감속·경량화 + 방향 화살표 오버레이(사용자 피드백). 바람장·이류 도메인을 수도권(서울·인천·경기)으로 확장, 초기 농도장 3개 시도 실측 병합. 백엔드 신규 2건 테스트, **수도권 실키 실기동 검증 완료(2026-07-25)**. 화면 육안 확인 잔여 |
 | 30 | 바람길 도메인 서해~동해 확장 | COMPLETED | 바람장·이류 도메인을 중부권(125.70~129.50, 36.90~38.10)으로 가로 확장(사용자 피드백: 인천 미세먼지가 어디로 흘러가는지 끝까지 보이게). 격자 25×25→40×20, KMA 샘플 18→29지점, 초기 농도장 6개 시도(인천·서울·경기·강원·충북·충남) 병합. **실키 실기동 검증 완료(2026-07-25)**. 화면 육안 확인 잔여 |
 | 31 | PM2.5 이동 예측 3D 기둥 표현 | COMPLETED | 지도 전체를 덮던 반투명 타일(같은 등급이면 단색 안개처럼 보임)을 높이·색이 농도에 비례하는 3D 기둥으로 교체(사용자 피드백). 기둥 사이 틈으로 지도 노출, 등급색 연속 보간 램프. 프론트 tsc·빌드·Vitest 통과. 화면 육안 확인 잔여 |
+| 32 | 실시간 CCTV 레이어 + 초기 화면 조정 | COMPLETED | ITS 국가교통정보센터 CCTV OpenAPI 연동(/api/cctv/streams, 인천 3구 필터, 5분 캐시, 키 없으면 Mock). 3D 지도 📹 마커 + 클릭 시 HLS 재생 모달(hls.js, 창 확대·전체화면). 최초 로드 시 연수송도 관측소 자동 선택, PM2.5 이동 예측 기본 꺼짐. 백엔드 테스트 3건 신규. Mock 실기동 검증, 실영상은 ITS 키 필요 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -1242,3 +1243,41 @@ wind_direction)를 그대로 사용한다.
   높이 과장·틈 크기는 `mapConfig.ts advectionGrid`(heightPerUnit·footprintRatio)로 조정
 - 농도가 전 지역 균일하면(무풍·저농도) 기둥 높이도 균일해 이동이 잘 안 보이는 것이
   모델 특성상 정상(이류만 반영)
+
+## Phase 32. 실시간 CCTV 레이어 + 초기 화면 조정 — COMPLETED (2026-07-25)
+
+사용자 요청: ① 3D 지도 최초 화면에서 관측소 '인천 송도'가 선택된 상태로 시작,
+② PM2.5 이동 예측 레이어는 기본 꺼짐, ③ 인천 연수·남동·미추홀구의 실시간 CCTV를
+지도에 연동하고 영상은 확대 가능하게.
+
+### 구현 내용
+
+- [x] **초기 화면**: 관측소 이동 드롭다운을 controlled로 바꾸고 최초 로드 시
+      이름에 '송도'가 포함된 관측소(시드 `연수송도`)를 자동 선택 + 해당 위치로 카메라
+      이동. `layers.advection` 초기값 true → false — COMPLETED (육안 확인 잔여)
+- [x] **CCTV 백엔드** (`publicdata/cctv` 신규): `ItsCctvProperties`(ITS_CCTV_KEY),
+      `CctvClient`(ITS 국가교통정보센터 /cctvInfo, cctvType=1 HLS, Mock fixture),
+      `CctvStreamService`(3구 bbox 합집합 1회 조회 → `Districts.CORE_THREE` 포함
+      카메라만 구 이름과 함께 반환, 5분 TTL 캐시), `GET /api/cctv/streams`.
+      단위 테스트 3건(3구 필터·좌표 오류 제외·mock 플래그) — VERIFIED
+- [x] **CCTV 프론트**: `실시간 CCTV(인천 3구)` 레이어(📹 마커), 마커 클릭 시
+      InfoBox 대신 재생 모달(`CctvPlayerModal`) — hls.js로 HLS 재생(Safari는 네이티브),
+      **창 확대/축소 토글 + 전체화면 버튼**, Mock·스트림 오류 시 안내 문구.
+      `selectedEntityChanged`에서 CCTV 엔티티만 가로채 모달 오픈 — COMPLETED
+- [x] 문서: api-spec CCTV 절, user-guide §7·키 안내·v1.21, .env.example ITS_CCTV_KEY
+
+### 실기동 검증 (2026-07-25)
+
+- Mock 모드: `GET /api/cctv/streams` → mock=true, 3구 카메라 6대(구 이름 매핑) 확인
+- 백엔드 `gradlew build` 전체 통과(신규 3건 포함), 프론트 tsc·빌드·Vitest 43건 통과
+
+### 미완료 항목·알려진 한계
+
+- **실제 영상 재생은 ITS 키 필요**: its.go.kr 오픈API 신청 → .env `ITS_CCTV_KEY` 입력
+  후 백엔드 재시작. 키 입력 전에는 Mock 카메라 위치만 표시되고 영상은 나오지 않음
+- ITS는 도로(국도·고속도로 축) CCTV라 3구 내 대수·위치가 도로망 중심임 —
+  구 전역 골고루가 아닐 수 있음
+- ITS 스트림은 http:// 주소인 경우가 있어 https로 서비스할 때 혼합 콘텐츠 차단 가능
+  (로컬 http 개발 환경에서는 문제 없음)
+- 화면 육안 확인 잔여(Chrome 확장 미연결): 초기 송도 선택·카메라 이동, CCTV 마커 표시,
+  모달 재생·확대·전체화면, 콘솔 오류 없음

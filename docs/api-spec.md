@@ -67,6 +67,11 @@
 | GET | /api/wind/advection?hours=6 | PM2.5·PM10 단순 이류 예측 (semi-Lagrangian, advection-only, 1~6시간) {bounds, width, height, model, mock, frames[{time, pm25[], pm10[]?}]}. 초기장은 AirKorea 인천·서울·경기·강원·충북·충남 실측 IDW(일부 시도 실패 허용) |
 | GET | /api/air-quality/district-forecast?hours=6 | 미추홀·남동·연수 구별 요약: current[{district, pm25, pm10, wind{speedMs, directionDeg, directionText, movementText}}] + hourly[{time, districts[...]}]. 기존 /api/air-quality/forecast(예보통보)와 별개 |
 
+### 실시간 CCTV
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | /api/cctv/streams | 인천 미추홀·남동·연수구 실시간 도로 CCTV 목록 {mock, stale, loadedAt, source, count, cameras[{name, district, latitude, longitude, streamUrl, format}]}. ITS 국가교통정보센터 OpenAPI(cctvType=1, HLS), 5분 캐시. 키(ITS_CCTV_KEY, its.go.kr 발급) 미설정 시 Mock(카메라 위치만, streamUrl 빈 값) |
+
 ### 악취 모니터링
 | 메서드 | 경로 | 설명 |
 |---|---|---|

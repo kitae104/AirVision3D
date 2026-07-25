@@ -64,6 +64,25 @@ export interface OdorResponse {
   failedOffices: string[]
 }
 
+export interface CctvCamera {
+  name: string
+  district: string
+  latitude: number
+  longitude: number
+  /** HLS(m3u8) 스트림 주소 — Mock 모드에서는 빈 문자열 */
+  streamUrl: string
+  format: string
+}
+
+export interface CctvStreamsResponse {
+  mock: boolean
+  stale: boolean
+  loadedAt: string | null
+  source: string
+  count: number
+  cameras: CctvCamera[]
+}
+
 export interface CsvUploadResult {
   totalRows: number
   inserted: number

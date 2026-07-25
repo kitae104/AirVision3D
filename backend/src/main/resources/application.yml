@@ -75,6 +75,12 @@ airvision:
       - office: 송도사업소
         path: /15105073/v1/uddi:21a67adc-88aa-430e-af34-f89cbf921a18
         fixture: songdo.json
+  # ITS 국가교통정보센터 실시간 도로 CCTV (인천 핵심 3구, HLS 스트림)
+  # 키는 its.go.kr 오픈API 신청으로 발급 (공공데이터포털 키와 별개). 없으면 Mock 동작.
+  its:
+    service-key: ${ITS_CCTV_KEY:}
+    base-url: ${ITS_BASE_URL:https://openapi.its.go.kr:9443}
+    cache-seconds: 300
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     expiration-hours: 12

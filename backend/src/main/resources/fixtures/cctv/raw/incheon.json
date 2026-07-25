@@ -1,0 +1,74 @@
+{
+  "response": {
+    "coordtype": 1,
+    "datacount": 6,
+    "data": [
+      {
+        "roadsectionid": "",
+        "coordx": "126.6570",
+        "coordy": "37.4480",
+        "cctvresolution": "",
+        "filecreatetime": "",
+        "cctvtype": "1",
+        "cctvformat": "HLS",
+        "cctvname": "[Mock] 미추홀 인하대역 사거리",
+        "cctvurl": ""
+      },
+      {
+        "roadsectionid": "",
+        "coordx": "126.6800",
+        "coordy": "37.4650",
+        "cctvresolution": "",
+        "filecreatetime": "",
+        "cctvtype": "1",
+        "cctvformat": "HLS",
+        "cctvname": "[Mock] 미추홀 주안역 앞",
+        "cctvurl": ""
+      },
+      {
+        "roadsectionid": "",
+        "coordx": "126.7400",
+        "coordy": "37.4300",
+        "cctvresolution": "",
+        "filecreatetime": "",
+        "cctvtype": "1",
+        "cctvformat": "HLS",
+        "cctvname": "[Mock] 남동 남동IC 부근",
+        "cctvurl": ""
+      },
+      {
+        "roadsectionid": "",
+        "coordx": "126.7300",
+        "coordy": "37.4470",
+        "cctvresolution": "",
+        "filecreatetime": "",
+        "cctvtype": "1",
+        "cctvformat": "HLS",
+        "cctvname": "[Mock] 남동 구월동 교차로",
+        "cctvurl": ""
+      },
+      {
+        "roadsectionid": "",
+        "coordx": "126.6400",
+        "coordy": "37.3900",
+        "cctvresolution": "",
+        "filecreatetime": "",
+        "cctvtype": "1",
+        "cctvformat": "HLS",
+        "cctvname": "[Mock] 연수 송도국제대로",
+        "cctvurl": ""
+      },
+      {
+        "roadsectionid": "",
+        "coordx": "126.6600",
+        "coordy": "37.4100",
+        "cctvresolution": "",
+        "filecreatetime": "",
+        "cctvtype": "1",
+        "cctvformat": "HLS",
+        "cctvname": "[Mock] 연수 동춘동 사거리",
+        "cctvurl": ""
+      }
+    ]
+  }
+}
