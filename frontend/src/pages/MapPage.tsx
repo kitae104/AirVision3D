@@ -376,6 +376,75 @@ function toWindData(field: WindFieldResponse, hourIndex: number): WindData {
   }
 }
 
+/** 이동 방향(도, 북=0 시계방향) → 16방위 텍스트 */
+const DIRECTIONS_16 = [
+  '북', '북북동', '북동', '동북동', '동', '동남동', '남동', '남남동',
+  '남', '남남서', '남서', '서남서', '서', '서북서', '북서', '북북서',
+] as const
+function headingText16(deg: number): string {
+  return DIRECTIONS_16[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16]
+}
+
+/** 풍속 → 파티클 색상 램프와 동일한 색 (화살표·파티클 색 기준 통일) */
+function windSpeedColor(speedMs: number, alpha: number): Cesium.Color {
+  const colors = MAP_CONFIG.windLayer.colors
+  const t = Math.min(speedMs / MAP_CONFIG.windArrowGrid.refSpeedMs, 0.999)
+  return Cesium.Color.fromCssColorString(
+    colors[Math.floor(t * colors.length)]).withAlpha(alpha)
+}
+
+/**
+ * 바람장 격자를 균등 샘플링해 이동 방향 화살표를 그린다.
+ * 파티클은 움직임(애니메이션), 화살표는 방향·세기(정적)를 담당해
+ * 한눈에 바람 흐름을 읽을 수 있게 한다.
+ */
+function addWindArrows(ds: Cesium.CustomDataSource, field: WindFieldResponse,
+                       hourIndex: number) {
+  ds.entities.removeAll()
+  const hour = field.hours[Math.min(hourIndex, field.hours.length - 1)]
+  if (!hour) return
+  const cfg = MAP_CONFIG.windArrowGrid
+  const step = Math.max(1, Math.round(field.width / cfg.perAxis))
+  const cellLatDeg = (field.bounds.north - field.bounds.south) / field.height
+  const cellLonDeg = (field.bounds.east - field.bounds.west) / field.width
+  for (let row = Math.floor(step / 2); row < field.height; row += step) {
+    const lat = field.bounds.south + (row + 0.5) * cellLatDeg
+    const mPerDegLon = 111_320 * Math.cos((lat * Math.PI) / 180)
+    for (let col = Math.floor(step / 2); col < field.width; col += step) {
+      const idx = row * field.width + col
+      const u = hour.u[idx]
+      const v = hour.v[idx]
+      const speed = Math.hypot(u, v)
+      if (speed < cfg.minSpeedMs) continue
+      const lon = field.bounds.west + (col + 0.5) * cellLonDeg
+      const lengthM = cfg.minLengthM
+        + (cfg.maxLengthM - cfg.minLengthM) * Math.min(speed / cfg.refSpeedMs, 1)
+      // (u,v)는 동·북 방향 이동 성분 → 셀 중심을 기준으로 앞뒤 절반씩 벌린다
+      const dLat = (v / speed) * lengthM / 111_320
+      const dLon = (u / speed) * lengthM / mPerDegLon
+      const headingDeg = ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360
+      ds.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+            lon - dLon / 2, lat - dLat / 2, cfg.altitudeM,
+            lon + dLon / 2, lat + dLat / 2, cfg.altitudeM,
+          ]),
+          width: cfg.widthPx,
+          material: new Cesium.PolylineArrowMaterialProperty(
+            windSpeedColor(speed, cfg.alpha)),
+        },
+        name: '바람 이동 방향',
+        description: `<table class="cesium-infoBox-defaultTable"><tbody>
+          <tr><th>풍속</th><td><b>${speed.toFixed(1)}</b> m/s</td></tr>
+          <tr><th>이동 방향</th><td>${headingText16(headingDeg)}쪽 (${headingDeg.toFixed(0)}°)</td></tr>
+          <tr><th>예보 시각</th><td>${new Date(hour.time).toLocaleString('ko-KR')}</td></tr>
+          <tr><th>출처</th><td>기상청 초단기예보 바람장 (수도권 격자)</td></tr>
+          </tbody></table>`,
+      })
+    }
+  }
+}
+
 /** 이류 예측 프레임 1개를 셀 타일링으로 렌더 (addIdwSurface와 동일한 표현 방식) */
 function addAdvectionFrame(ds: Cesium.CustomDataSource, resp: AdvectionResponse,
                            frameIndex: number) {
@@ -933,8 +1002,8 @@ export default function MapPage() {
       idwSurface: new Cesium.CustomDataSource('idwSurface'),
       alertRegion: new Cesium.CustomDataSource('alertRegion'),
       odor: new Cesium.CustomDataSource('odor'),
-      // wind 데이터소스는 Record<LayerKey, …> 타입을 만족시키기 위한 자리로
-      // 엔티티는 넣지 않는다 — 파티클은 WindLayer가 직접 그린다.
+      // wind 데이터소스에는 방향 화살표 엔티티를 넣는다
+      // (파티클 애니메이션은 WindLayer가 직접 그린다).
       wind: new Cesium.CustomDataSource('wind'),
       advection: new Cesium.CustomDataSource('advection'),
     }
@@ -995,11 +1064,12 @@ export default function MapPage() {
     if (windLayerRef.current) windLayerRef.current.show = layers.wind
   }, [layers])
 
-  // 바람길 파티클 레이어: 데이터 로드 시 생성, 시간 변경 시 데이터 교체
+  // 바람길 파티클 + 방향 화살표: 데이터 로드 시 생성, 시간 변경 시 데이터 교체
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || viewer.isDestroyed() || !windField) return
-    const data = toWindData(windField, Math.min(hourOffset, windField.hours.length - 1))
+    const hourIndex = Math.min(hourOffset, windField.hours.length - 1)
+    const data = toWindData(windField, hourIndex)
     if (!windLayerRef.current) {
       // as const로 readonly가 된 colors를 mutable 배열로 복사해 전달
       const layer = new WindLayer(viewer, data,
@@ -1009,6 +1079,8 @@ export default function MapPage() {
     } else {
       windLayerRef.current.updateWindData(data)
     }
+    const ds = dataSourcesRef.current
+    if (ds) addWindArrows(ds.wind, windField, hourIndex)
     // layers.wind는 위의 표시/숨김 effect가 관리 — 여기 의존성에 넣지 않는다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windField, hourOffset])
@@ -1542,7 +1614,7 @@ export default function MapPage() {
             </span>
           )}
           <span className="text-xs text-gray-400">
-            기상청 초단기예보 기반 · 인천권 격자 {windField.width}×{windField.height}
+            기상청 초단기예보 기반 · 수도권(서울·인천·경기) 격자 {windField.width}×{windField.height}
           </span>
         </div>
       )}

@@ -68,18 +68,37 @@ export const MAP_CONFIG = {
     color: '#0891b2',
   },
 
-  /** 바람길 파티클 애니메이션 (cesium-wind-layer) */
+  /** 바람길 파티클 애니메이션 (cesium-wind-layer)
+   *  흐름 이해가 목적이므로 적고·가늘고·느리게 유지한다 (2026-07-25 사용자 피드백). */
   windLayer: {
-    /** 파티클 수 = size² (100 → 10,000개) */
-    particlesTextureSize: 100,
+    /** 파티클 수 = size² (64 → 4,096개) */
+    particlesTextureSize: 64,
     /** 파티클 표시 고도 (m) */
     particleHeight: 120,
-    speedFactor: 0.5,
-    lineWidth: { min: 1, max: 2.5 },
-    lineLength: { min: 30, max: 120 },
+    speedFactor: 0.15,
+    lineWidth: { min: 0.8, max: 1.6 },
+    lineLength: { min: 20, max: 80 },
     dropRate: 0.003,
     dropRateBump: 0.001,
     /** 풍속 저→고 색상 램프 (Windy 스타일) */
     colors: ['#3b82f6', '#22d3ee', '#4ade80', '#facc15', '#fb923c', '#ef4444'],
+  },
+
+  /** 바람장 격자 화살표 오버레이 (방향을 한눈에 읽는 정적 화살표) */
+  windArrowGrid: {
+    /** 축당 목표 화살표 수 (격자를 이 수준으로 균등 샘플링) */
+    perAxis: 9,
+    /** 표시 고도 (m) */
+    altitudeM: 150,
+    /** 화살표 선 두께 (px) — PolylineArrow는 이 폭으로 화살촉을 그린다 */
+    widthPx: 12,
+    /** 풍속 최소~기준(refSpeedMs 이상)일 때 화살표 길이 (m) */
+    minLengthM: 3000,
+    maxLengthM: 10000,
+    /** 길이·색 스케일 기준 풍속 (m/s) */
+    refSpeedMs: 8,
+    /** 이 풍속(m/s) 미만이면 화살표를 그리지 않는다 (무풍) */
+    minSpeedMs: 0.2,
+    alpha: 0.9,
   },
 } as const
