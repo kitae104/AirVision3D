@@ -13,7 +13,8 @@ import type {
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { odorGradeOf } from '../config/odorGrades'
-import { MAP_CONFIG } from '../config/mapConfig'
+import { MAP_CONFIG, gridSettingsFor } from '../config/mapConfig'
+import type { GridPresetKey, GridSettings } from '../config/mapConfig'
 import {
   DISTRICT_VIEW_HEIGHT, INCHEON_CORE_DISTRICTS, INCHEON_FOCUS_VIEW,
   SIDO_CENTERS, SIDO_VIEW_HEIGHT,
@@ -21,7 +22,7 @@ import {
 import { summarizeAlertsByDistrict } from '../utils/alerts'
 import type { DistrictAlertSummary } from '../utils/alerts'
 import { interpolationSeries, predictionSeries } from '../utils/compareSeries'
-import { pathDistanceKm } from '../utils/geo'
+import { pathDistanceKm, polygonAreaKm2 } from '../utils/geo'
 import {
   DEFAULT_HUMIDITY, DEFAULT_TEMPERATURE, estimateBadgeText, nearestSite,
 } from '../utils/cctvEstimate'
@@ -103,8 +104,7 @@ function buildDescription(type: string, pm25: number | null, time: string | unde
 }
 
 /** 격자 박스 중심 좌표 목록 계산 */
-function gridPositions(lng: number, lat: number) {
-  const g = MAP_CONFIG.grid
+function gridPositions(lng: number, lat: number, g: GridSettings) {
   const mPerDegLat = 111_320
   const mPerDegLng = 111_320 * Math.cos((lat * Math.PI) / 180)
   const positions: { lng: number; lat: number; alt: number; center: boolean }[] = []
@@ -125,13 +125,12 @@ function gridPositions(lng: number, lat: number) {
 
 /** 정적(현재값) 격자 추가 */
 function addStaticGrid(ds: Cesium.CustomDataSource, lng: number, lat: number, pm25: number,
-                       name: string, type: string) {
-  for (const pos of gridPositions(lng, lat)) {
+                       name: string, type: string, g: GridSettings) {
+  for (const pos of gridPositions(lng, lat, g)) {
     ds.entities.add({
       position: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, pos.alt),
       box: {
-        dimensions: new Cesium.Cartesian3(
-          MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxHeight),
+        dimensions: new Cesium.Cartesian3(g.boxSize, g.boxSize, g.boxHeight),
         material: pm25Color(pm25, MAP_CONFIG.boxAlpha),
         outline: pos.center,
         outlineColor: pm25Color(pm25, 0.8),
@@ -174,7 +173,7 @@ function addMarker(ds: Cesium.CustomDataSource, lng: number, lat: number, name: 
  * 시계열 격자 추가: 샘플별 1시간 구간의 색상/라벨을 TimeIntervalCollectionProperty로 구성.
  * 데이터가 없는 시간은 entity availability로 숨긴다 (완료 조건: 데이터 없는 시간 처리).
  */
-function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite,
+function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite, g: GridSettings,
                            markerColor: string = MAP_CONFIG.markers.observation,
                            seriesType: string = '관측값 시계열') {
   const colorProp = new Cesium.TimeIntervalCollectionProperty()
@@ -224,13 +223,12 @@ function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite,
   })
 
   // 시간에 따라 색이 변하는 격자
-  for (const pos of gridPositions(site.longitude, site.latitude)) {
+  for (const pos of gridPositions(site.longitude, site.latitude, g)) {
     ds.entities.add({
       availability,
       position: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, pos.alt),
       box: {
-        dimensions: new Cesium.Cartesian3(
-          MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxHeight),
+        dimensions: new Cesium.Cartesian3(g.boxSize, g.boxSize, g.boxHeight),
         material: new Cesium.ColorMaterialProperty(colorProp),
         outline: pos.center,
         outlineColor: outlineProp,
@@ -1024,7 +1022,11 @@ export default function MapPage() {
   const [dualMode, setDualMode] = useState(false)
   /** 시계열 재로드 시 증가 — 듀얼맵 비교 뷰가 새 기간을 다시 그리도록 하는 신호 */
   const [seriesKey, setSeriesKey] = useState(0)
-  const [measuring, setMeasuring] = useState(false)
+  /** 측정 도구 (보고서 §4.3.3: 거리·면적·고도) — null이면 측정 꺼짐 */
+  const [measureTool, setMeasureTool] = useState<'distance' | 'area' | 'height' | null>(null)
+  /** 입체격자 세밀도 (상세 = 보고서 §3.1.2 규격 7×7×3) */
+  const [gridPreset, setGridPreset] = useState<GridPresetKey>('basic')
+  const gridCfg = gridSettingsFor(gridPreset)
   const [baseMap, setBaseMap] = useState<'osm' | 'satellite'>(
     (import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined) ? 'satellite' : 'osm')
   const [from, setFrom] = useState('')
@@ -1204,13 +1206,15 @@ export default function MapPage() {
         addMarker(ds.observation, o.longitude, o.latitude, o.siteName,
           MAP_CONFIG.markers.observation,
           buildDescription('관측값', o.pm25, o.observedAt, o.latitude, o.longitude))
-        addStaticGrid(ds.observation, o.longitude, o.latitude, o.pm25, o.siteName, '관측값')
+        addStaticGrid(ds.observation, o.longitude, o.latitude, o.pm25, o.siteName, '관측값',
+          gridCfg)
       }
       for (const p of predRes.data.data) {
         addMarker(ds.prediction, p.longitude, p.latitude, `${p.siteName} (예측)`,
           MAP_CONFIG.markers.prediction,
           buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude))
-        addStaticGrid(ds.prediction, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값')
+        addStaticGrid(ds.prediction, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값',
+          gridCfg)
       }
       const seen = new Set<string>()
       for (const r of idwRes.data.data.content) {
@@ -1223,10 +1227,10 @@ export default function MapPage() {
           buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude))
         ds.interpolation.entities.add({
           position: Cesium.Cartesian3.fromDegrees(
-            r.longitude, r.latitude, MAP_CONFIG.grid.baseAltitude),
+            r.longitude, r.latitude, gridCfg.baseAltitude),
           box: {
             dimensions: new Cesium.Cartesian3(
-              MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxSize, MAP_CONFIG.grid.boxHeight),
+              gridCfg.boxSize, gridCfg.boxSize, gridCfg.boxHeight),
             material: pm25Color(r.pm25, MAP_CONFIG.boxAlpha),
             outline: true,
             outlineColor: pm25Color(r.pm25, 0.8),
@@ -1284,7 +1288,7 @@ export default function MapPage() {
       // 자체 관측 → observation 레이어, 공공 실측 → airkorea 레이어 (예측/보간은 최신값 유지)
       ds.observation.entities.removeAll()
       for (const site of obs) {
-        addTimeSeriesSite(ds.observation, site)
+        addTimeSeriesSite(ds.observation, site, gridCfg)
       }
       ds.airkorea.entities.removeAll()
       for (const station of pub) {
@@ -1557,10 +1561,12 @@ export default function MapPage() {
           if (cancelled || compare.isDestroyed()) return
           for (const s of predictionSeries(
               predRes.data.data.content, sitesRef.current, fromIso, toIso)) {
-            addTimeSeriesSite(compareDs, s, MAP_CONFIG.markers.prediction, 'AI 예측 시계열')
+            addTimeSeriesSite(compareDs, s, gridCfg, MAP_CONFIG.markers.prediction,
+              'AI 예측 시계열')
           }
           for (const s of interpolationSeries(idwRes.data.data.content, fromIso, toIso)) {
-            addTimeSeriesSite(compareDs, s, MAP_CONFIG.markers.interpolation, 'IDW 보간 시계열')
+            addTimeSeriesSite(compareDs, s, gridCfg, MAP_CONFIG.markers.interpolation,
+              'IDW 보간 시계열')
           }
         } else {
           const [predRes, idwRes] = await Promise.all([
@@ -1572,7 +1578,8 @@ export default function MapPage() {
             addMarker(compareDs, p.longitude, p.latitude, `${p.siteName} (예측)`,
               MAP_CONFIG.markers.prediction,
               buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude))
-            addStaticGrid(compareDs, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값')
+            addStaticGrid(compareDs, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값',
+              gridCfg)
           }
           const seen = new Set<string>()
           for (const r of idwRes.data.data.content) {
@@ -1583,7 +1590,8 @@ export default function MapPage() {
             addMarker(compareDs, r.longitude, r.latitude, name,
               MAP_CONFIG.markers.interpolation,
               buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude))
-            addStaticGrid(compareDs, r.longitude, r.latitude, r.pm25, name, 'IDW 보간값')
+            addStaticGrid(compareDs, r.longitude, r.latitude, r.pm25, name, 'IDW 보간값',
+              gridCfg)
           }
         }
       } catch (err) {
@@ -1601,8 +1609,9 @@ export default function MapPage() {
       if (!compare.isDestroyed()) compare.destroy()
     }
     // seriesKey: [시계열 로드]로 기간이 바뀔 때 비교 뷰를 다시 그리기 위한 의존성
+    // gridPreset: 격자 세밀도 변경 시 비교 뷰 격자도 다시 그린다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dualMode, mode, seriesKey])
+  }, [dualMode, mode, seriesKey, gridPreset])
 
   // 공공 대기질 현재값 레이어 렌더링. 시계열 모드에서는 재생 엔티티를 유지하고,
   // 현재값 모드로 돌아오면(mode 변경) 현재 측정소·풍향을 다시 그린다.
@@ -1622,13 +1631,29 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicAir?.sido])
 
-  // 거리 측정 모드: 좌클릭으로 지점 추가(점+선+누적 거리 라벨), 우클릭으로 종료.
+  // 격자 세밀도 변경 시 현재 모드의 격자를 다시 그린다 (최초 마운트 로드와 중복 방지 위해 뷰어 준비 후에만)
+  const gridPresetInitRef = useRef(true)
+  useEffect(() => {
+    if (gridPresetInitRef.current) {
+      gridPresetInitRef.current = false
+      return
+    }
+    if (!viewerRef.current) return
+    if (mode === 'series') loadSeries()
+    else loadCurrent()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridPreset])
+
+  // 측정 모드 (보고서 §4.3.3(3): 면적·거리·고도).
+  // 거리: 좌클릭 지점 추가(점+선+누적 km), 우클릭 종료.
+  // 면적: 좌클릭 꼭짓점 추가(3점부터 다각형+㎢ 라벨 갱신), 우클릭 종료.
+  // 고도: 1회 클릭 지점의 지형·객체 높이 표시 후 자동 종료 (보고서: 고도는 한 번만 사용).
   // 측정 중에는 뷰어 기본 클릭 동작(엔티티 선택→InfoBox, 더블클릭 추적)을 제거해
   // 마커·격자 위를 클릭해도 InfoBox가 열리지 않게 하고, 종료 시 원래대로 복원한다.
   useEffect(() => {
     const viewer = viewerRef.current
     const measureDs = measureDsRef.current
-    if (!measuring || !viewer || !measureDs) return
+    if (!measureTool || !viewer || !measureDs) return
 
     viewer.selectedEntity = undefined // 열려 있는 InfoBox 닫기
     const defaultHandler = viewer.screenSpaceEventHandler
@@ -1638,6 +1663,35 @@ export default function MapPage() {
       Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
     defaultHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK)
     defaultHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
+
+    // 고도 측정: 반투명 격자·막대도 pickPosition으로 깊이를 얻도록 임시 활성화
+    const prevPickTranslucent = viewer.scene.pickTranslucentDepth
+    if (measureTool === 'height') viewer.scene.pickTranslucentDepth = true
+
+    const labelStyle = {
+      font: '13px sans-serif',
+      fillColor: Cesium.Color.YELLOW,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -20),
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    }
+    const addVertexPoint = (lng: number, lat: number) =>
+      measureDs.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lng, lat, 5),
+        point: {
+          pixelSize: 8,
+          color: Cesium.Color.YELLOW,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
+      })
+
+    // 면적 측정: 다각형·라벨 엔티티는 1개를 유지하며 꼭짓점 추가 시 갱신
+    let areaPolygon: Cesium.Entity | null = null
+    let areaLabel: Cesium.Entity | null = null
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
     handler.setInputAction((click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
@@ -1649,20 +1703,36 @@ export default function MapPage() {
         latitude: Cesium.Math.toDegrees(carto.latitude),
         longitude: Cesium.Math.toDegrees(carto.longitude),
       }
+
+      if (measureTool === 'height') {
+        // 지형 높이(지형 데이터 없는 타원체 지도는 0m) + 클릭 지점 객체(격자·막대) 높이
+        const terrainH = viewer.scene.globe.getHeight(carto) ?? 0
+        let objectH = 0
+        if (viewer.scene.pickPositionSupported) {
+          const picked = viewer.scene.pickPosition(click.position)
+          if (picked) {
+            const pickedCarto = Cesium.Cartographic.fromCartesian(picked)
+            objectH = Math.max(0, pickedCarto.height - terrainH)
+          }
+        }
+        addVertexPoint(point.longitude, point.latitude)
+        measureDs.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude, 5),
+          label: {
+            ...labelStyle,
+            text: `고도 ${Math.round(terrainH + objectH)} m`
+              + ` (지형 ${Math.round(terrainH)} m + 객체 ${Math.round(objectH)} m)`,
+          },
+        })
+        setMeasureTool(null) // 고도 측정은 1회 사용 후 종료
+        return
+      }
+
       const points = measurePointsRef.current
       points.push(point)
+      addVertexPoint(point.longitude, point.latitude)
 
-      measureDs.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude, 5),
-        point: {
-          pixelSize: 8,
-          color: Cesium.Color.YELLOW,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        },
-      })
-      if (points.length >= 2) {
+      if (measureTool === 'distance' && points.length >= 2) {
         const prev = points[points.length - 2]
         measureDs.entities.add({
           polyline: {
@@ -1675,20 +1745,38 @@ export default function MapPage() {
         })
         measureDs.entities.add({
           position: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude, 5),
+          label: { ...labelStyle, text: `${pathDistanceKm(points).toFixed(2)} km` },
+        })
+      }
+
+      if (measureTool === 'area' && points.length >= 3) {
+        const positions = Cesium.Cartesian3.fromDegreesArray(
+          points.flatMap((p) => [p.longitude, p.latitude]))
+        if (areaPolygon) measureDs.entities.remove(areaPolygon)
+        if (areaLabel) measureDs.entities.remove(areaLabel)
+        areaPolygon = measureDs.entities.add({
+          polygon: {
+            hierarchy: new Cesium.PolygonHierarchy(positions),
+            material: Cesium.Color.YELLOW.withAlpha(0.25),
+            outline: true,
+            outlineColor: Cesium.Color.YELLOW,
+          },
+        })
+        const areaKm2 = polygonAreaKm2(points)
+        const centerLat = points.reduce((s, p) => s + p.latitude, 0) / points.length
+        const centerLng = points.reduce((s, p) => s + p.longitude, 0) / points.length
+        areaLabel = measureDs.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, 5),
           label: {
-            text: `${pathDistanceKm(points).toFixed(2)} km`,
-            font: '13px sans-serif',
-            fillColor: Cesium.Color.YELLOW,
-            outlineColor: Cesium.Color.BLACK,
-            outlineWidth: 3,
-            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            pixelOffset: new Cesium.Cartesian2(0, -20),
-            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            ...labelStyle,
+            text: areaKm2 < 0.1
+              ? `${Math.round(areaKm2 * 1_000_000).toLocaleString()} ㎡`
+              : `${areaKm2.toFixed(2)} ㎢`,
           },
         })
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
-    handler.setInputAction(() => setMeasuring(false),
+    handler.setInputAction(() => setMeasureTool(null),
       Cesium.ScreenSpaceEventType.RIGHT_CLICK)
 
     return () => {
@@ -1696,6 +1784,7 @@ export default function MapPage() {
       measurePointsRef.current = []
       // 뷰어 기본 클릭 동작 복원 (뷰어가 이미 파괴됐으면 생략)
       if (!viewer.isDestroyed()) {
+        viewer.scene.pickTranslucentDepth = prevPickTranslucent
         if (defaultLeftClick) {
           defaultHandler.setInputAction(
             defaultLeftClick, Cesium.ScreenSpaceEventType.LEFT_CLICK)
@@ -1706,7 +1795,7 @@ export default function MapPage() {
         }
       }
     }
-  }, [measuring])
+  }, [measureTool])
 
   /** 현재 지도 화면을 PNG로 저장 (보고서 '이미지 저장' 기능: capture_날짜.png) */
   const captureScreen = () => {
@@ -1861,18 +1950,28 @@ export default function MapPage() {
           듀얼맵
         </button>
 
-        <button
-          type="button"
-          onClick={() => setMeasuring(!measuring)}
-          className={`rounded-md border px-2 py-1 text-xs ${
-            measuring
-              ? 'border-yellow-500 bg-yellow-500 text-white hover:bg-yellow-600'
-              : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-          }`}
-          title="좌클릭으로 지점 추가, 우클릭으로 종료"
-        >
-          {measuring ? '측정 중 (우클릭 종료)' : '거리 측정'}
-        </button>
+        <span className="flex items-center gap-1 text-sm text-gray-700">
+          <span className="text-gray-500">측정</span>
+          {([
+            { key: 'distance', label: '거리', title: '좌클릭으로 지점 추가, 우클릭으로 종료' },
+            { key: 'area', label: '면적', title: '좌클릭으로 꼭짓점 추가(3점 이상), 우클릭으로 종료' },
+            { key: 'height', label: '고도', title: '지점을 1회 클릭하면 지형·객체 높이 표시' },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setMeasureTool(measureTool === t.key ? null : t.key)}
+              className={`rounded-md border px-2 py-1 text-xs ${
+                measureTool === t.key
+                  ? 'border-yellow-500 bg-yellow-500 text-white hover:bg-yellow-600'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+              }`}
+              title={t.title}
+            >
+              {measureTool === t.key ? `${t.label} 측정 중` : t.label}
+            </button>
+          ))}
+        </span>
         <button
           type="button"
           onClick={() => measureDsRef.current?.entities.removeAll()}
@@ -1899,6 +1998,22 @@ export default function MapPage() {
             {baseMap === 'osm' ? '위성 지도' : '일반 지도'}
           </button>
         )}
+
+        <label className="flex items-center gap-1.5 text-sm text-gray-700">
+          <span className="text-gray-500">격자</span>
+          <select
+            value={gridPreset}
+            onChange={(e) => setGridPreset(e.target.value as GridPresetKey)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            title="관측소당 입체격자 세밀도 (상세 7×7×3 = 최종보고서 규격)"
+          >
+            {Object.entries(MAP_CONFIG.gridPresets).map(([key, p]) => (
+              <option key={key} value={key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {layers.airkorea && (
           <label className="flex items-center gap-1.5 text-sm text-gray-700">
@@ -2068,7 +2183,8 @@ export default function MapPage() {
 
       <p className="text-xs text-gray-400">
         박스를 클릭하면 상세정보가 표시됩니다 · 격자: 관측소당{' '}
-        {MAP_CONFIG.grid.countX}x{MAP_CONFIG.grid.countY}x{MAP_CONFIG.grid.countZ} · ion 토큰
+        {gridCfg.countX}x{gridCfg.countY}x{gridCfg.countZ}
+        {gridPreset === 'detailed' && ' (최종보고서 규격)'} · ion 토큰
         없이 OSM 지도로 동작 (.env의 VITE_CESIUM_ION_TOKEN으로 위성영상 사용 가능)
       </p>
       <p className="text-xs text-gray-400">

@@ -17,6 +17,18 @@
 | POST | /api/auth/login | 로그인 → {token, username, name, role} |
 | GET | /api/auth/me | 현재 사용자 확인 |
 
+### 사용자 관리 (Phase 38, 보고서 표 3-20)
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | /api/users | 사용자 목록 (ADMIN) |
+| POST | /api/users | 사용자 등록 {username, password(8자+), name, role} (ADMIN) → 201 |
+| GET | /api/users/{id} | 사용자 상세 (ADMIN) |
+| PUT | /api/users/{id} | 이름·역할 수정 (ADMIN, 마지막 ADMIN 강등 불가) |
+| PUT | /api/users/{id}/password | 비밀번호 재설정 {password} (ADMIN) |
+| DELETE | /api/users/{id} | 삭제 (ADMIN, 자기 자신·마지막 ADMIN 불가) |
+| GET | /api/users/me | 내 정보 (로그인 사용자) |
+| PUT | /api/users/me/password | 내 비밀번호 변경 {currentPassword, newPassword} (로그인 사용자) |
+
 ### 관측소
 | 메서드 | 경로 | 설명 |
 |---|---|---|

@@ -23,3 +23,25 @@ export function pathDistanceKm(points: { latitude: number; longitude: number }[]
   }
   return total
 }
+
+/**
+ * 다각형(위경도 점 목록, 마지막-첫 점 자동 연결) 면적(km²).
+ * 평균 위도 기준 등장방형 투영 후 신발끈 공식 — 시 단위(수십 km) 규모까지 적합.
+ */
+export function polygonAreaKm2(points: { latitude: number; longitude: number }[]): number {
+  if (points.length < 3) return 0
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const lat0 = points.reduce((sum, p) => sum + p.latitude, 0) / points.length
+  const cos0 = Math.cos(toRad(lat0))
+  const xy = points.map((p) => ({
+    x: EARTH_RADIUS_KM * toRad(p.longitude) * cos0,
+    y: EARTH_RADIUS_KM * toRad(p.latitude),
+  }))
+  let sum = 0
+  for (let i = 0; i < xy.length; i++) {
+    const a = xy[i]
+    const b = xy[(i + 1) % xy.length]
+    sum += a.x * b.y - b.x * a.y
+  }
+  return Math.abs(sum) / 2
+}

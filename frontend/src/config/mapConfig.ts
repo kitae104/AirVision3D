@@ -5,7 +5,7 @@ export const MAP_CONFIG = {
    *  (config/sido.ts INCHEON_FOCUS_VIEW와 동일 값 유지) */
   initialView: { longitude: 126.69, latitude: 37.433, height: 40_000 },
 
-  /** 관측소당 3D 박스 격자 크기 (MVP: 3x3x2, 성능 확인 후 확장 가능) */
+  /** 관측소당 3D 박스 격자 크기 (기본 프리셋 = GRID_PRESETS.basic과 동일 값 유지) */
   grid: {
     countX: 3,
     countY: 3,
@@ -24,6 +24,14 @@ export const MAP_CONFIG = {
 
   /** 박스 투명도 */
   boxAlpha: 0.35,
+
+  /** 입체격자 세밀도 프리셋 — 상세는 최종보고서 §3.1.2 규격(관측소당 7×7×3).
+   *  상세 프리셋은 격자 개수가 커지는 만큼 간격·박스를 줄여
+   *  기본 프리셋과 비슷한 지상 footprint(약 1.2→1.8km)를 유지한다. */
+  gridPresets: {
+    basic: { label: '기본 (3×3×2)', countX: 3, countY: 3, countZ: 2, spacing: 400, boxSize: 340 },
+    detailed: { label: '상세 (7×7×3)', countX: 7, countY: 7, countZ: 3, spacing: 260, boxSize: 220 },
+  },
 
   /** 레이어별 아이콘 색상 */
   markers: {
@@ -118,3 +126,30 @@ export const MAP_CONFIG = {
     alpha: 0.9,
   },
 } as const
+
+export type GridPresetKey = keyof typeof MAP_CONFIG.gridPresets
+
+/** 격자 생성에 필요한 전체 설정 (개수·간격·크기 = 프리셋, 고도 관련 = grid 기본값) */
+export type GridSettings = {
+  countX: number
+  countY: number
+  countZ: number
+  spacing: number
+  boxSize: number
+  boxHeight: number
+  baseAltitude: number
+  levelGap: number
+}
+
+/** 프리셋 키 → 격자 설정 병합 */
+export function gridSettingsFor(preset: GridPresetKey): GridSettings {
+  const p = MAP_CONFIG.gridPresets[preset]
+  return {
+    ...MAP_CONFIG.grid,
+    countX: p.countX,
+    countY: p.countY,
+    countZ: p.countZ,
+    spacing: p.spacing,
+    boxSize: p.boxSize,
+  }
+}

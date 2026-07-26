@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { to: '/predict', label: 'AI 예측', adminOnly: true },
   { to: '/interpolation', label: 'IDW 보간', adminOnly: true },
   { to: '/metrics', label: '모델 성능', adminOnly: false },
+  { to: '/users', label: '사용자 관리', adminOnly: true },
 ]
 
 /** 로그인 필수 공통 레이아웃 (사이드바 + 콘텐츠) */
@@ -49,6 +50,12 @@ export default function Layout() {
         <div className="border-t border-gray-200 p-4">
           <p className="text-sm font-medium text-gray-900">{name}</p>
           <p className="mb-2 text-xs text-gray-500">{role === 'ADMIN' ? '관리자' : '일반 사용자'}</p>
+          <NavLink
+            to="/my-page"
+            className="mb-2 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-center text-sm text-gray-600 hover:bg-gray-100"
+          >
+            마이페이지
+          </NavLink>
           <button
             onClick={() => {
               logout()

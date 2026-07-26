@@ -77,4 +77,20 @@ public class User {
     public String getRole() {
         return role;
     }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
 }

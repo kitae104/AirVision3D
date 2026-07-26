@@ -6,9 +6,11 @@ import InterpolationPage from './pages/InterpolationPage'
 import LoginPage from './pages/LoginPage'
 import MapPage from './pages/MapPage'
 import MetricsPage from './pages/MetricsPage'
+import MyPage from './pages/MyPage'
 import ObservationsPage from './pages/ObservationsPage'
 import PredictPage from './pages/PredictPage'
 import PublicAirPage from './pages/PublicAirPage'
+import UsersPage from './pages/UsersPage'
 
 export default function App() {
   return (
@@ -20,6 +22,15 @@ export default function App() {
         <Route path="/observations" element={<ObservationsPage />} />
         <Route path="/public-air" element={<PublicAirPage />} />
         <Route path="/metrics" element={<MetricsPage />} />
+        <Route path="/my-page" element={<MyPage />} />
+        <Route
+          path="/users"
+          element={
+            <AdminOnly>
+              <UsersPage />
+            </AdminOnly>
+          }
+        />
         <Route
           path="/data-entry"
           element={

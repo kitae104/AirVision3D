@@ -438,6 +438,15 @@ export interface DistrictForecast {
   hourly: DistrictHourForecast[]
 }
 
+/** 사용자 관리 API 응답 (보고서 표 3-20: 사용자 목록/등록/상세/수정/삭제) */
+export interface UserSummary {
+  id: number
+  username: string
+  name: string
+  role: 'USER' | 'ADMIN'
+  createdAt: string
+}
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 
