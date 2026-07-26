@@ -43,6 +43,7 @@
 | GET | /api/predictions?siteId&page&size | 목록 (최신순) |
 | GET | /api/predictions/models/{name}/metrics | 모델 성능지표 (AI 서비스 프록시) |
 | POST | /api/predictions/cctv | multipart{siteId, image, temperature, humidity, modelName?} → CCTV 이미지 즉시 추정(저장 안 함). 주간: AI 추론 + 최근접 실측 비율 PM10 + Koschmieder 간이 가시거리. 야간(태양고도<0도): 최근접 AirKorea 실측 대체(mode=STATION_FALLBACK) |
+| GET | /api/predictions/accuracy | 모델별 예측 vs 실측 정확도 리포트 {totalWithActual, pointLimit, models[{modelName, count, mae, rmse, meanError, gradeAccuracy, points[{predictedPm25, actualPm25, predictedAt, siteName}]}]}. actual_pm25 기록 건 기준, 등급은 동일 기준 재계산, points는 모델당 최신 300건 캡(집계는 전체) |
 
 ### IDW 보간
 | 메서드 | 경로 | 설명 |

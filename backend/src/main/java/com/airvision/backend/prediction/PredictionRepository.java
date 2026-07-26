@@ -17,6 +17,16 @@ public interface PredictionRepository extends JpaRepository<Prediction, Long> {
     /** 구 소속 관측소의 최근 예측 건수 (대시보드 구 단위 필터용). */
     long countByPredictedAtAfterAndSite_District(java.time.Instant time, String district);
 
+    /** 실측값이 기록된 예측 전체 (모델 정확도 리포트용, 최신순). */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT p FROM Prediction p
+            JOIN FETCH p.model
+            JOIN FETCH p.site
+            WHERE p.actualPm25 IS NOT NULL
+            ORDER BY p.predictedAt DESC
+            """)
+    java.util.List<Prediction> findAllWithActual();
+
     /** 관측소별 최신 예측 (3D 지도 예측 레이어용). */
     interface LatestPrediction {
         Long getSiteId();

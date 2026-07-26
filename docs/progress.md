@@ -43,6 +43,8 @@
 | 31 | PM2.5 이동 예측 3D 기둥 표현 | COMPLETED | 지도 전체를 덮던 반투명 타일(같은 등급이면 단색 안개처럼 보임)을 높이·색이 농도에 비례하는 3D 기둥으로 교체(사용자 피드백). 기둥 사이 틈으로 지도 노출, 등급색 연속 보간 램프. 프론트 tsc·빌드·Vitest 통과. 화면 육안 확인 잔여 |
 | 32 | 실시간 CCTV 레이어 + 초기 화면 조정 | COMPLETED | ITS 국가교통정보센터 CCTV OpenAPI 연동(/api/cctv/streams, 인천 3구 필터, 5분 캐시, 키 없으면 Mock). 3D 지도 📹 마커 + 클릭 시 HLS 재생 모달(hls.js, 창 확대·전체화면). 최초 로드 시 연수송도 관측소 자동 선택, PM2.5 이동 예측 기본 꺼짐. 백엔드 테스트 3건 신규. Mock 실기동 검증, 실영상은 ITS 키 필요 |
 | 33 | CCTV 프레임 → AI 미세먼지 즉시 추정 | COMPLETED | 재생 모달의 현재 화면(Mock은 합성 샘플 이미지)을 캡처해 /api/predictions/cctv로 즉시 추정, 결과를 모달 패널 + 지도 마커 배지(라벨 줄·등급색)로 표시. 최근접 관측소 온습도 자동 입력(없으면 기본값). 프론트 전용(백엔드 변경 없음), Vitest 신규 6건(총 49건). **API 실기동 검증 완료(2026-07-26)**: mode=AI_IMAGE, PM2.5 30.1(보통) 확인. 화면 육안 확인 잔여 |
+| 34 | 예측 기반 사전 경보 배너 | COMPLETED | 구별 이류 예측(district-forecast)에서 "현재 등급보다 악화되어 나쁨 이상 진입" 예상 시점을 계산해 모든 페이지 상단 주황 배너로 안내(참고용, 공식 경보와 별개). 프론트 전용(computePreAlerts 순수 함수 + PreAlertBanner). Vitest 신규 6건. **API 실기동 검증(2026-07-26)**: 실키 3구 5~8㎍/㎥ 전부 좋음 → 무경보 정상. 화면 육안 확인 잔여 |
+| 35 | 모델 정확도 비교 리포트 | COMPLETED | GET /api/predictions/accuracy 신설 — actual_pm25 기록 예측을 모델별 MAE·RMSE·평균 오차·등급 일치율로 집계(+산점도 점, 모델당 300건 캡). 모델 성능 화면에 비교 표 + 예측 vs 실측 산점도(y=x 대각선) 추가. 백엔드 신규 3건 테스트. **실기동 검증(2026-07-26)**: 실 DB 7건·2모델 집계 확인. 화면 육안 확인 잔여 |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -1328,3 +1330,69 @@ wind_direction)를 그대로 사용한다.
 - AI 모델은 합성/샘플 하늘 이미지 학습 기반 — 실 도로 CCTV 화면에서는 추정 편차가
   클 수 있음(실이미지 데이터셋 확보 시 재학습 권장, Phase 28 권장 작업과 동일)
 - AI 서비스(:8000) 미기동 시 502 메시지가 결과 패널에 표시됨(정상 동작)
+
+## Phase 34. 예측 기반 사전 경보 배너 — COMPLETED (2026-07-26)
+
+사용자 선택 기능(제안 4종 중 2번). 구별 이류 예측을 이용해 "N시간 후 ○○구 '나쁨' 진입
+예상"을 모든 페이지 상단에 사전 안내한다. 공식 발령 경보 배너(Phase 15)와 별개의
+예측 기반 참고 정보. 설계: `docs/superpowers/specs/2026-07-26-pre-alert-banner-design.md`
+
+### 구현 내용 (프론트 전용 — 백엔드 변경 없음)
+
+- [x] `utils/preAlerts.ts` `computePreAlerts` — GET /api/air-quality/district-forecast의
+      current·hourly에서 구별로 "현재 등급보다 악화 + 나쁨 이상" 첫 진입 시점 탐지.
+      같은 구가 매우나쁨까지 가면 가장 나쁜 등급의 첫 도달 시점 보고, 이미 나쁨인 구는
+      매우나쁨 악화만 경보, pm25 null 건너뜀 — COMPLETED
+- [x] `components/PreAlertBanner.tsx` — 주황(amber) 배너: 구·N시간 후·예상 등급·PM2.5·
+      시각·"단순 이류 추정 참고용"(mock 시 Mock 표기). 예측 없음/조회 실패 시 미표시.
+      `Layout.tsx`의 AlertBanner 아래 마운트(모든 페이지) — COMPLETED
+- [x] `api/client.ts` DistrictForecast 타입 추가 (기존 API 응답 대응)
+
+### 테스트·실기동 검증 (2026-07-26)
+
+- Vitest 신규 6건(진입 예상·무경보·이미 나쁨→악화만·매우나쁨 최악 등급 보고·null 처리·
+  구 이름순 정렬) 통과
+- 실기동(실키): district-forecast mock=false, 3구 현재 5.4~6.6㎍/㎥·6프레임 7㎍/㎥대
+  전부 '좋음' → 경보 조건 미충족으로 무표시가 정상 동작
+
+### 미완료 항목·알려진 한계
+
+- 화면 육안 확인 잔여: 고농도 악화가 예측되는 날(또는 Mock 시연) 배너 표시 확인
+- 단순 이류(advection-only) 기반 참고용 — 배출·확산 미포함, 구별 값은 근사 bbox 평균
+
+## Phase 35. 모델 정확도 비교 리포트 — COMPLETED (2026-07-26)
+
+사용자 선택 기능(제안 4종 중 3번). 예측 저장 시 기록되는 actual_pm25(Phase 20)를
+모델별로 집계해 "모델 성능" 화면에서 실측 대비 정확도를 비교한다.
+설계: `docs/superpowers/specs/2026-07-26-model-accuracy-report-design.md`
+
+### 구현 내용
+
+- [x] **백엔드** `GET /api/predictions/accuracy` — `PredictionRepository.findAllWithActual()`
+      (모델·관측소 JOIN FETCH, 최신순), `PredictionAccuracyService`: 모델명 그룹핑 후
+      count·MAE·RMSE·meanError(예측-실측 평균)·gradeAccuracy(예측·실측을
+      GradeProperties 동일 기준으로 재등급화한 일치율) 집계 + 산점도 점
+      (모델당 최신 300건 캡, pointLimit 필드 명시, 집계는 전체 기준).
+      모델 정렬 건수 내림차순 (테스트 3건: 집계 수치·빈 목록·포인트 캡) — VERIFIED
+- [x] **프론트** 모델 성능 화면 확장 — 기존 AI 테스트 세트 지표(독립 로드로 재구성,
+      AI 서비스가 꺼져 있어도 리포트는 표시됨) 아래 "실측 대비 정확도" 절:
+      모델 비교 표(건수·MAE·RMSE·평균 오차±·등급 일치율) + recharts 산점도
+      (X=실측, Y=예측, y=x 대각 참조선, 모델별 색). 실측 기록 없으면 안내 문구 — COMPLETED
+- [x] 기존 PredictionControllerTest에 신규 의존성 MockitoBean 추가(컨텍스트 로드 실패 수정)
+- [x] 문서: api-spec AI 예측 표에 accuracy 행, user-guide §6·§12·v1.23/v1.24
+
+### 테스트·실기동 검증 (2026-07-26)
+
+- 백엔드 `gradlew build` 전체 통과(209건, 신규 3건 포함) — 최초 실행에서
+  PredictionControllerTest 7건이 새 생성자 의존성 누락으로 실패 → MockitoBean 추가 후 통과
+- 프론트 tsc·빌드·Vitest **55건** 통과 (recharts Tooltip formatter 타입 오류 1건 수정)
+- 실기동(실 DB): `GET /api/predictions/accuracy` → totalWithActual=7, 2모델 —
+  resnet18_multimodal_v1: 6건 MAE 28.18·평균 오차 +28.18·등급 일치 0%,
+  resnet18_solar_v1: 1건 MAE 78.87 (합성 학습 모델이 실측 대비 과대예측하는 실태가
+  수치로 드러남 — 리포트 목적에 부합하는 정직한 결과)
+
+### 미완료 항목·알려진 한계
+
+- 화면 육안 확인 잔여(비교 표·산점도 렌더)
+- actual_pm25는 예측 실행 시점의 관측소 최신 관측값(간이 대조) — 시각 차 존재 가능
+- 표본이 적을 때(수 건) 지표 변동이 큼 — 화면에 건수 병기로 완화

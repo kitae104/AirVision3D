@@ -37,6 +37,9 @@ class PredictionControllerTest {
     @MockitoBean
     private CctvEstimateService cctvEstimateService;
 
+    @MockitoBean
+    private PredictionAccuracyService predictionAccuracyService;
+
     private final MockMultipartFile image = new MockMultipartFile(
             "image", "sky.png", "image/png", new byte[]{1, 2, 3});
 

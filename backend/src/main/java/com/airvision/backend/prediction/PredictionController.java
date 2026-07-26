@@ -29,11 +29,23 @@ public class PredictionController {
 
     private final PredictionService predictionService;
     private final CctvEstimateService cctvEstimateService;
+    private final PredictionAccuracyService predictionAccuracyService;
 
     public PredictionController(PredictionService predictionService,
-                                CctvEstimateService cctvEstimateService) {
+                                CctvEstimateService cctvEstimateService,
+                                PredictionAccuracyService predictionAccuracyService) {
         this.predictionService = predictionService;
         this.cctvEstimateService = cctvEstimateService;
+        this.predictionAccuracyService = predictionAccuracyService;
+    }
+
+    @Operation(summary = "모델별 예측 vs 실측 정확도 리포트",
+            description = "actual_pm25가 기록된 예측을 모델별로 MAE·RMSE·평균 오차·"
+                    + "등급 일치율로 집계하고 산점도용 점 목록을 반환한다")
+    @GetMapping("/accuracy")
+    public ApiResponse<com.airvision.backend.prediction.dto.PredictionAccuracyResponse>
+            accuracy() {
+        return ApiResponse.ok(predictionAccuracyService.report());
     }
 
     @Operation(summary = "AI 예측 실행",
