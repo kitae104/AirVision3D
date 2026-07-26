@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from 'react'
 import { apiClient, errorMessage } from '../api/client'
 import Hls from 'hls.js'
 import type {
-  AdvectionResponse, AirAlert, ApiResponse, CctvCamera, CctvStreamsResponse,
+  AdvectionResponse, AirAlert, ApiResponse, CctvCamera, CctvEstimate, CctvStreamsResponse,
   CurrentAirQuality, IdwGridResponse,
-  InterpolationResult, OdorResponse, OdorSpot, PageResponse, PollutantValue, Prediction,
-  PublicStationAir, Site, WeatherNow, WindFieldResponse,
+  InterpolationResult, Observation, OdorResponse, OdorSpot, PageResponse, PollutantValue,
+  Prediction, PublicStationAir, Site, WeatherNow, WindFieldResponse,
 } from '../api/client'
 import { GRADES, gradeOf } from '../config/grades'
 import { odorGradeOf } from '../config/odorGrades'
@@ -22,6 +22,9 @@ import { summarizeAlertsByDistrict } from '../utils/alerts'
 import type { DistrictAlertSummary } from '../utils/alerts'
 import { interpolationSeries, predictionSeries } from '../utils/compareSeries'
 import { pathDistanceKm } from '../utils/geo'
+import {
+  DEFAULT_HUMIDITY, DEFAULT_TEMPERATURE, estimateBadgeText, nearestSite,
+} from '../utils/cctvEstimate'
 import {
   PUBLIC_GRADE_COLORS, PUBLIC_POLLUTANTS, VALUE_STATUS_LABELS,
   displayHeightM, publicGradeOf,
@@ -542,15 +545,80 @@ function addCctvCamera(ds: Cesium.CustomDataSource, cam: CctvCamera, mock: boole
   })
 }
 
-/** 실시간 CCTV 재생 모달 (HLS). 확대/축소 토글 + 브라우저 전체화면 지원 */
-function CctvPlayerModal({ camera, mock, onClose }: {
+/** 비디오 현재 프레임을 JPEG Blob으로 캡처. 준비 전·보안 제한 시 오류를 던진다 */
+function captureVideoFrame(video: HTMLVideoElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      reject(new Error('영상이 아직 준비되지 않았습니다. 재생 시작 후 다시 시도해 주세요.'))
+      return
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      reject(new Error('캔버스를 생성할 수 없습니다'))
+      return
+    }
+    ctx.drawImage(video, 0, 0)
+    try {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('프레임 캡처에 실패했습니다'))),
+        'image/jpeg', 0.85)
+    } catch {
+      // Safari 네이티브 HLS 등 교차 출처 직접 재생은 캔버스가 오염되어 내보내기가 차단된다
+      reject(new Error('이 브라우저에서는 보안 제한으로 화면 캡처를 지원하지 않습니다'))
+    }
+  })
+}
+
+/** Mock 모드 시연용 합성 하늘 이미지 (저장소에 바이너리를 추가하지 않기 위해 캔버스로 생성) */
+function sampleSkyImageBlob(): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 640
+    canvas.height = 360
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      reject(new Error('캔버스를 생성할 수 없습니다'))
+      return
+    }
+    const sky = ctx.createLinearGradient(0, 0, 0, canvas.height)
+    sky.addColorStop(0, '#6ea8dc')
+    sky.addColorStop(0.65, '#c9dcec')
+    sky.addColorStop(1, '#e6e2d8')
+    ctx.fillStyle = sky
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#7d838a'
+    ctx.fillRect(0, 320, canvas.width, 40)
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('샘플 이미지 생성에 실패했습니다'))),
+      'image/jpeg', 0.85)
+  })
+}
+
+/** 실시간 CCTV 재생 모달 (HLS). 확대/축소 토글 + 전체화면 + 현재 프레임 미세먼지 추정 */
+function CctvPlayerModal({ camera, mock, sites, onEstimated, onClose }: {
   camera: CctvCamera
   mock: boolean
+  sites: Site[]
+  onEstimated: (camera: CctvCamera, estimate: CctvEstimate) => void
   onClose: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [large, setLarge] = useState(false)
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [estimating, setEstimating] = useState(false)
+  const [estimate, setEstimate] = useState<CctvEstimate | null>(null)
+  const [estimateNote, setEstimateNote] = useState<string | null>(null)
+  const [estimateError, setEstimateError] = useState<string | null>(null)
+
+  // 카메라를 바꿔 열면 이전 추정 결과를 비운다
+  useEffect(() => {
+    setEstimate(null)
+    setEstimateNote(null)
+    setEstimateError(null)
+  }, [camera])
 
   useEffect(() => {
     const video = videoRef.current
@@ -582,6 +650,61 @@ function CctvPlayerModal({ camera, mock, onClose }: {
     })
     return () => hls.destroy()
   }, [camera])
+
+  /** 재생 중 화면이 있으면 현재 프레임, 없으면(Mock) 합성 샘플 이미지로 즉시 추정 */
+  const canCapture = !!camera.streamUrl && !streamError
+  const runEstimate = async () => {
+    setEstimating(true)
+    setEstimate(null)
+    setEstimateNote(null)
+    setEstimateError(null)
+    try {
+      const video = videoRef.current
+      const usingSample = !canCapture || !video
+      const image = video && !usingSample
+        ? await captureVideoFrame(video)
+        : await sampleSkyImageBlob()
+      const site = nearestSite(sites, camera.latitude, camera.longitude)
+      if (!site) throw new Error('추정에 사용할 관측소가 없습니다')
+      // 온·습도는 최근접 관측소의 최신 관측값을 자동 사용, 없으면 기본값으로 진행
+      let temperature = DEFAULT_TEMPERATURE
+      let humidity = DEFAULT_HUMIDITY
+      let usedDefaults = true
+      try {
+        const obsRes = await apiClient.get<ApiResponse<PageResponse<Observation>>>(
+          `/observations?siteId=${site.id}&size=1`)
+        const latest = obsRes.data.data.content[0]
+        if (latest?.temperature != null && latest?.humidity != null) {
+          temperature = latest.temperature
+          humidity = latest.humidity
+          usedDefaults = false
+        }
+      } catch {
+        // 관측 조회 실패는 기본값으로 대체하고 추정은 계속한다
+      }
+      const form = new FormData()
+      form.append('siteId', String(site.id))
+      form.append('image', image, 'cctv-frame.jpg')
+      form.append('temperature', String(temperature))
+      form.append('humidity', String(humidity))
+      const res = await apiClient.post<ApiResponse<CctvEstimate>>('/predictions/cctv', form)
+      const est = res.data.data
+      setEstimate(est)
+      setEstimateNote([
+        usingSample ? '샘플 이미지 시연' : '현재 화면 캡처',
+        `기준 관측소 ${site.name}`,
+        usedDefaults
+          ? `온습도 기본값 ${DEFAULT_TEMPERATURE}℃/${DEFAULT_HUMIDITY}%`
+          : `온도 ${temperature}℃ · 습도 ${humidity}%`,
+      ].join(' · '))
+      onEstimated(camera, est)
+    } catch (err) {
+      setEstimateError(
+        err instanceof Error && err.name !== 'AxiosError' ? err.message : errorMessage(err))
+    } finally {
+      setEstimating(false)
+    }
+  }
 
   const buttonClass =
     'rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100'
@@ -630,6 +753,47 @@ function CctvPlayerModal({ camera, mock, onClose }: {
               : '이 카메라의 스트림 주소가 제공되지 않았습니다.')}
           </div>
         )}
+        <div className="mt-3">
+          <button
+            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={runEstimate}
+            disabled={estimating}
+          >
+            {estimating
+              ? '추정 중…'
+              : canCapture ? '이 화면으로 미세먼지 추정' : '샘플 이미지로 추정 시연'}
+          </button>
+          {estimateError && (
+            <p className="mt-2 text-sm text-red-600">{estimateError}</p>
+          )}
+          {estimate && (
+            <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-800">
+                {estimate.pm25 != null ? (
+                  <>
+                    <span className={`rounded px-2 py-0.5 text-xs font-bold ${gradeOf(estimate.pm25).badge}`}>
+                      {estimate.grade ?? gradeOf(estimate.pm25).name}
+                    </span>
+                    <span className="font-bold">PM2.5 {estimate.pm25.toFixed(1)} ㎍/㎥</span>
+                  </>
+                ) : (
+                  <span>PM2.5 추정값 없음</span>
+                )}
+                {estimate.pm10 != null && <span>PM10 {estimate.pm10.toFixed(1)} ㎍/㎥</span>}
+                {estimate.visibilityKm != null && (
+                  <span>가시거리 약 {estimate.visibilityKm.toFixed(1)} km</span>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {estimate.mode === 'STATION_FALLBACK'
+                  ? `야간(태양고도 ${estimate.solarElevationDeg.toFixed(1)}°) — 최근접 실측 대체`
+                    + (estimate.stationName ? ` (${estimate.stationName} 측정소)` : '')
+                  : `AI 이미지 추론 (${estimate.modelName})`}
+                {estimateNote ? ` · ${estimateNote}` : ''}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -957,6 +1121,28 @@ export default function MapPage() {
       }
     } catch {
       ds.cctv.entities.removeAll()
+    }
+  }
+
+  /** CCTV 프레임 추정 성공 → 해당 마커에 추정 배지(라벨 줄 추가 + 등급색) 표시. 세션 내에서만 유지 */
+  const handleCctvEstimated = (camera: CctvCamera, est: CctvEstimate) => {
+    const ds = dataSourcesRef.current
+    if (!ds || est.pm25 == null) return
+    const grade = gradeOf(est.pm25)
+    const badge = estimateBadgeText(est.pm25, est.grade ?? grade.name)
+    if (!badge) return
+    const now = Cesium.JulianDate.now()
+    for (const entity of ds.cctv.entities.values) {
+      const cam = entity.properties?.cctvCamera?.getValue(now) as CctvCamera | undefined
+      if (!cam || cam.name !== camera.name) continue
+      if (entity.label) {
+        entity.label.text = new Cesium.ConstantProperty(
+          `📹 ${camera.name.replace(/^\[Mock\] /, '')}\n${badge}`)
+      }
+      if (entity.point) {
+        entity.point.color = new Cesium.ConstantProperty(
+          Cesium.Color.fromCssColorString(grade.chart).withAlpha(0.95))
+      }
     }
   }
 
@@ -1894,6 +2080,8 @@ export default function MapPage() {
         <CctvPlayerModal
           camera={cctvPlayback.camera}
           mock={cctvPlayback.mock}
+          sites={sites}
+          onEstimated={handleCctvEstimated}
           onClose={() => setCctvPlayback(null)}
         />
       )}

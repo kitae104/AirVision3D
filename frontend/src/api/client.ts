@@ -83,6 +83,22 @@ export interface CctvStreamsResponse {
   cameras: CctvCamera[]
 }
 
+/** CCTV 이미지 즉시 추정 결과 (backend CctvEstimateResponse 대응, 저장 안 함) */
+export interface CctvEstimate {
+  siteId: number
+  modelName: string
+  /** AI_IMAGE: 주간 AI 이미지 추론 / STATION_FALLBACK: 야간 최근접 실측 대체 */
+  mode: 'AI_IMAGE' | 'STATION_FALLBACK'
+  night: boolean
+  solarElevationDeg: number
+  pm25: number | null
+  pm10: number | null
+  grade: string | null
+  visibilityKm: number | null
+  stationName: string | null
+  estimatedAt: string
+}
+
 export interface CsvUploadResult {
   totalRows: number
   inserted: number
