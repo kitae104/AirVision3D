@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import AlertBanner from './AlertBanner'
+import PreAlertBanner from './PreAlertBanner'
 
 const NAV_ITEMS = [
   { to: '/', label: '대시보드', adminOnly: false },
@@ -61,6 +62,7 @@ export default function Layout() {
       </aside>
       <main className="flex-1 overflow-x-auto p-6">
         <AlertBanner />
+        <PreAlertBanner />
         <Outlet />
       </main>
     </div>

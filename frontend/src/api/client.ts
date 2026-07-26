@@ -380,6 +380,64 @@ export interface AdvectionResponse {
   frames: AdvectionFrame[]
 }
 
+// ── 모델 정확도 리포트 (predictions/accuracy) 타입 ──────────
+
+export interface AccuracyPoint {
+  predictedPm25: number
+  actualPm25: number
+  predictedAt: string
+  siteName: string
+}
+
+export interface ModelAccuracy {
+  modelName: string
+  count: number
+  mae: number
+  rmse: number
+  /** (예측-실측) 평균. 양수면 과대예측 경향 */
+  meanError: number
+  /** 등급 일치율 (0~1) */
+  gradeAccuracy: number
+  points: AccuracyPoint[]
+}
+
+export interface PredictionAccuracy {
+  totalWithActual: number
+  pointLimit: number
+  models: ModelAccuracy[]
+}
+
+// ── 구별 확산 예측 (district-forecast) 타입 ──────────────────
+
+/** 바람 벡터 요약. directionDeg는 기상학적 풍향(불어오는 방향, 북=0) */
+export interface DistrictWind {
+  speedMs: number | null
+  directionDeg: number | null
+  directionText: string | null
+  movementText: string | null
+}
+
+export interface DistrictNow {
+  district: string
+  pm25: number | null
+  pm10: number | null
+  wind: DistrictWind | null
+}
+
+export interface DistrictHourForecast {
+  time: string
+  districts: DistrictNow[]
+}
+
+export interface DistrictForecast {
+  baseTime: string | null
+  source: string
+  model: string
+  mock: boolean
+  current: DistrictNow[]
+  hourly: DistrictHourForecast[]
+}
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 
