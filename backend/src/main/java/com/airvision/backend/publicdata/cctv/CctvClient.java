@@ -23,6 +23,8 @@ import org.springframework.web.client.RestClientException;
  * ITS 국가교통정보센터 실시간 도로 CCTV OpenAPI 클라이언트.
  * OdorClient와 동일한 정책(Mock 자동, 1회 재시도, 키 비로깅)을 따른다.
  * cctvType=1(실시간 스트리밍, HLS)만 조회한다.
+ * type=all(고속도로+국도): 인천 핵심 3구의 실시간 CCTV는 전부 고속도로(ex) 소관이라
+ * its(국도)만 조회하면 0건이 된다.
  */
 @Component
 public class CctvClient {
@@ -81,7 +83,7 @@ public class CctvClient {
             attempts++;
             try {
                 return restClient.get()
-                        .uri("/cctvInfo?apiKey={key}&type=its&cctvType=1"
+                        .uri("/cctvInfo?apiKey={key}&type=all&cctvType=1"
                                         + "&minX={minX}&maxX={maxX}&minY={minY}&maxY={maxY}"
                                         + "&getType=json",
                                 Map.of("key", serviceKey,

@@ -88,6 +88,42 @@ function pm25Color(pm25: number, alpha: number): Cesium.Color {
   return Cesium.Color.fromCssColorString(gradeOf(pm25).chart).withAlpha(alpha)
 }
 
+/** 마커 아이콘 표시 크기 (px) */
+const MARKER_ICON_PX = 32
+
+/**
+ * 이모지 마커 아이콘: 배경 도형 없이 이모지만 캔버스에 그려 빌보드 이미지로 쓴다.
+ * 위성 영상 등 어두운 배경에서도 잘 보이도록 흰 후광 + 옅은 그림자를 함께 그린다.
+ */
+const markerIconCache = new Map<string, HTMLCanvasElement>()
+function markerIcon(emoji: string): HTMLCanvasElement {
+  const cached = markerIconCache.get(emoji)
+  if (cached) return cached
+  const size = 72 // 고해상도 화면에서도 선명하도록 표시 크기의 2배 이상으로 그린다
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.font = `${Math.round(size * 0.7)}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    // 흰 후광 (겹쳐 그려 어두운 배경에서 윤곽 강조)
+    ctx.shadowColor = 'rgba(255,255,255,0.95)'
+    ctx.shadowBlur = 8
+    for (let i = 0; i < 3; i++) {
+      ctx.fillText(emoji, size / 2, size / 2 + 2)
+    }
+    // 옅은 그림자 (밝은 배경에서 떠 보이게)
+    ctx.shadowColor = 'rgba(0,0,0,0.4)'
+    ctx.shadowBlur = 5
+    ctx.shadowOffsetY = 2
+    ctx.fillText(emoji, size / 2, size / 2 + 2)
+  }
+  markerIconCache.set(emoji, canvas)
+  return canvas
+}
+
 /** 팝업(InfoBox) HTML. 지점명은 InfoBox 제목(entity.name)으로 표시된다. */
 function buildDescription(type: string, pm25: number | null, time: string | undefined,
                           lat: number, lng: number): string {
@@ -141,17 +177,18 @@ function addStaticGrid(ds: Cesium.CustomDataSource, lng: number, lat: number, pm
   }
 }
 
-/** 지점 마커(포인트+라벨) 추가. labelText에 Property를 주면 시간에 따라 변한다. */
+/** 지점 마커(이모지 아이콘+라벨) 추가. labelText에 Property를 주면 시간에 따라 변한다. */
 function addMarker(ds: Cesium.CustomDataSource, lng: number, lat: number, name: string,
-                   color: string, description: string,
-                   labelText?: Cesium.Property | string) {
+                   description: string,
+                   labelText?: Cesium.Property | string,
+                   emoji: string = MAP_CONFIG.markerEmojis.observation) {
   ds.entities.add({
     position: Cesium.Cartesian3.fromDegrees(lng, lat, 10),
-    point: {
-      pixelSize: 12,
-      color: Cesium.Color.fromCssColorString(color),
-      outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 2,
+    billboard: {
+      image: markerIcon(emoji),
+      width: MARKER_ICON_PX,
+      height: MARKER_ICON_PX,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
     },
     label: {
@@ -161,7 +198,7 @@ function addMarker(ds: Cesium.CustomDataSource, lng: number, lat: number, name: 
       outlineColor: Cesium.Color.BLACK,
       outlineWidth: 3,
       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-      pixelOffset: new Cesium.Cartesian2(0, -18),
+      pixelOffset: new Cesium.Cartesian2(0, -22),
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
     },
     name,
@@ -174,8 +211,8 @@ function addMarker(ds: Cesium.CustomDataSource, lng: number, lat: number, name: 
  * 데이터가 없는 시간은 entity availability로 숨긴다 (완료 조건: 데이터 없는 시간 처리).
  */
 function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite, g: GridSettings,
-                           markerColor: string = MAP_CONFIG.markers.observation,
-                           seriesType: string = '관측값 시계열') {
+                           seriesType: string = '관측값 시계열',
+                           emoji: string = MAP_CONFIG.markerEmojis.observation) {
   const colorProp = new Cesium.TimeIntervalCollectionProperty()
   const outlineProp = new Cesium.TimeIntervalCollectionProperty()
   const labelProp = new Cesium.TimeIntervalCollectionProperty()
@@ -200,11 +237,11 @@ function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite, g: Gri
   // 시간에 따라 값이 변하는 라벨 마커
   ds.entities.add({
     position: Cesium.Cartesian3.fromDegrees(site.longitude, site.latitude, 10),
-    point: {
-      pixelSize: 12,
-      color: Cesium.Color.fromCssColorString(markerColor),
-      outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 2,
+    billboard: {
+      image: markerIcon(emoji),
+      width: MARKER_ICON_PX,
+      height: MARKER_ICON_PX,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
     },
     label: {
@@ -214,7 +251,7 @@ function addTimeSeriesSite(ds: Cesium.CustomDataSource, site: SeriesSite, g: Gri
       outlineColor: Cesium.Color.BLACK,
       outlineWidth: 3,
       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-      pixelOffset: new Cesium.Cartesian2(0, -18),
+      pixelOffset: new Cesium.Cartesian2(0, -22),
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       showBackground: false,
     },
@@ -291,15 +328,15 @@ function addPublicStation(ds: Cesium.CustomDataSource, station: PublicStationAir
       name: `${station.stationName} (공공 실측)`,
       description,
     })
-    // 색상 + 텍스트 등급을 함께 표기 (색상만으로 상태를 구분하지 않음)
+    // 농도 값 + 텍스트 등급을 라벨에 함께 표기 (색상만으로 상태를 구분하지 않음)
     addMarker(ds, station.longitude, station.latitude, `${station.stationName} (공공 실측)`,
-      MAP_CONFIG.markers.airkorea, description,
-      `${station.stationName}\n${v.value}${config.unit} ${grade}`)
+      description, `${station.stationName}\n${v.value}${config.unit} ${grade}`,
+      MAP_CONFIG.markerEmojis.airkorea)
   } else {
-    // 데이터 없음/장애 측정소: 회색 마커 + 사유 텍스트 (오류처럼 보이지 않게)
+    // 데이터 없음/장애 측정소: 사유 텍스트 라벨 (오류처럼 보이지 않게)
     addMarker(ds, station.longitude, station.latitude, `${station.stationName} (공공 실측)`,
-      PUBLIC_GRADE_COLORS['데이터 없음'], description,
-      `${station.stationName}\n△ ${VALUE_STATUS_LABELS[v.status] ?? '데이터 없음'}`)
+      description, `${station.stationName}\n△ ${VALUE_STATUS_LABELS[v.status] ?? '데이터 없음'}`,
+      MAP_CONFIG.markerEmojis.airkorea)
   }
 }
 
@@ -521,21 +558,21 @@ function addAdvectionFrame(ds: Cesium.CustomDataSource, resp: AdvectionResponse,
 function addCctvCamera(ds: Cesium.CustomDataSource, cam: CctvCamera, mock: boolean) {
   ds.entities.add({
     position: Cesium.Cartesian3.fromDegrees(cam.longitude, cam.latitude, 25),
-    point: {
-      pixelSize: 11,
-      color: Cesium.Color.fromCssColorString(MAP_CONFIG.markers.cctv).withAlpha(0.95),
-      outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 2,
+    billboard: {
+      image: markerIcon(MAP_CONFIG.markerEmojis.cctv),
+      width: MARKER_ICON_PX,
+      height: MARKER_ICON_PX,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
     },
     label: {
-      text: `📹 ${cam.name.replace(/^\[Mock\] /, '')}`,
+      text: cam.name.replace(/^\[Mock\] /, ''),
       font: '12px sans-serif',
       fillColor: Cesium.Color.WHITE,
       outlineColor: Cesium.Color.BLACK,
       outlineWidth: 3,
       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-      pixelOffset: new Cesium.Cartesian2(0, -14),
+      pixelOffset: new Cesium.Cartesian2(0, -20),
       distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 60_000),
     },
     name: `${cam.name} (CCTV)`,
@@ -622,11 +659,26 @@ function CctvPlayerModal({ camera, mock, sites, onEstimated, onClose }: {
     const video = videoRef.current
     if (!video || !camera.streamUrl) return
     setStreamError(null)
-    // Safari 등 HLS 네이티브 지원 브라우저는 src 직접 재생
+    // HLS 네이티브 지원 브라우저(최신 Chromium·Safari)는 src 직접 재생.
+    // 교차 출처 스트림을 crossOrigin 없이 재생하면 캔버스가 오염되어 화면 캡처
+    // (미세먼지 추정)가 SecurityError로 막히므로 CORS 모드로 받는다
+    // (ITS 스트림 서버는 Access-Control-Allow-Origin: * 응답 확인).
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.crossOrigin = 'anonymous'
       video.src = camera.streamUrl
       video.play().catch(() => {})
+      // CORS를 지원하지 않는 스트림이면 crossOrigin 없이 1회 재시도해
+      // 재생만이라도 되게 한다 (이 경우 캡처는 기존 보안 제한 안내로 처리).
+      const retryWithoutCors = () => {
+        if (video.crossOrigin !== 'anonymous') return
+        video.crossOrigin = null
+        video.src = camera.streamUrl!
+        video.load()
+        video.play().catch(() => {})
+      }
+      video.addEventListener('error', retryWithoutCors)
       return () => {
+        video.removeEventListener('error', retryWithoutCors)
         video.removeAttribute('src')
         video.load()
       }
@@ -858,9 +910,6 @@ function addOdorSpot(ds: Cesium.CustomDataSource, spot: OdorSpot, mock: boolean)
   if (!spot.locationAvailable || spot.latitude == null || spot.longitude == null) return
   const dilution = spot.latestDilution
   const grade = dilution != null ? odorGradeOf(dilution) : null
-  const color = grade
-    ? Cesium.Color.fromCssColorString(grade.chart)
-    : Cesium.Color.fromCssColorString('#9ca3af')
   const valueText = dilution != null ? `${dilution}배` : '값 없음'
   const description = `
     <table class="cesium-infoBox-defaultTable"><tbody>
@@ -874,21 +923,21 @@ function addOdorSpot(ds: Cesium.CustomDataSource, spot: OdorSpot, mock: boolean)
     </tbody></table>`
   ds.entities.add({
     position: Cesium.Cartesian3.fromDegrees(spot.longitude, spot.latitude, 20),
-    point: {
-      pixelSize: 12,
-      color: color.withAlpha(0.9),
-      outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 2,
+    billboard: {
+      image: markerIcon(MAP_CONFIG.markerEmojis.odor),
+      width: MARKER_ICON_PX,
+      height: MARKER_ICON_PX,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
     },
     label: {
-      text: `👃 ${spot.spotName} ${valueText}`,
+      text: `${spot.spotName} ${valueText}`,
       font: '12px sans-serif',
       fillColor: Cesium.Color.WHITE,
       outlineColor: Cesium.Color.BLACK,
       outlineWidth: 3,
       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-      pixelOffset: new Cesium.Cartesian2(0, -14),
+      pixelOffset: new Cesium.Cartesian2(0, -20),
       distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 80_000),
     },
     name: `${spot.spotName} (악취)`,
@@ -946,11 +995,11 @@ function addPublicTimeSeries(ds: Cesium.CustomDataSource, station: PublicSeriesS
   ds.entities.add({
     availability,
     position: Cesium.Cartesian3.fromDegrees(station.longitude, station.latitude, 10),
-    point: {
-      pixelSize: 10,
-      color: Cesium.Color.fromCssColorString(MAP_CONFIG.markers.airkorea),
-      outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 2,
+    billboard: {
+      image: markerIcon(MAP_CONFIG.markerEmojis.airkorea),
+      width: MARKER_ICON_PX,
+      height: MARKER_ICON_PX,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
     },
     label: {
@@ -960,7 +1009,7 @@ function addPublicTimeSeries(ds: Cesium.CustomDataSource, station: PublicSeriesS
       outlineColor: Cesium.Color.BLACK,
       outlineWidth: 3,
       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-      pixelOffset: new Cesium.Cartesian2(0, -16),
+      pixelOffset: new Cesium.Cartesian2(0, -22),
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       showBackground: false,
     },
@@ -1139,11 +1188,7 @@ export default function MapPage() {
       if (!cam || cam.name !== camera.name) continue
       if (entity.label) {
         entity.label.text = new Cesium.ConstantProperty(
-          `📹 ${camera.name.replace(/^\[Mock\] /, '')}\n${badge}`)
-      }
-      if (entity.point) {
-        entity.point.color = new Cesium.ConstantProperty(
-          Cesium.Color.fromCssColorString(grade.chart).withAlpha(0.95))
+          `${camera.name.replace(/^\[Mock\] /, '')}\n${badge}`)
       }
     }
   }
@@ -1204,15 +1249,14 @@ export default function MapPage() {
 
       for (const o of obsRes.data.data) {
         addMarker(ds.observation, o.longitude, o.latitude, o.siteName,
-          MAP_CONFIG.markers.observation,
           buildDescription('관측값', o.pm25, o.observedAt, o.latitude, o.longitude))
         addStaticGrid(ds.observation, o.longitude, o.latitude, o.pm25, o.siteName, '관측값',
           gridCfg)
       }
       for (const p of predRes.data.data) {
         addMarker(ds.prediction, p.longitude, p.latitude, `${p.siteName} (예측)`,
-          MAP_CONFIG.markers.prediction,
-          buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude))
+          buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude),
+          undefined, MAP_CONFIG.markerEmojis.prediction)
         addStaticGrid(ds.prediction, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값',
           gridCfg)
       }
@@ -1223,8 +1267,8 @@ export default function MapPage() {
         seen.add(key)
         const name = r.targetName ?? `보간지점 ${r.id}`
         addMarker(ds.interpolation, r.longitude, r.latitude, name,
-          MAP_CONFIG.markers.interpolation,
-          buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude))
+          buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude),
+          undefined, MAP_CONFIG.markerEmojis.interpolation)
         ds.interpolation.entities.add({
           position: Cesium.Cartesian3.fromDegrees(
             r.longitude, r.latitude, gridCfg.baseAltitude),
@@ -1561,12 +1605,12 @@ export default function MapPage() {
           if (cancelled || compare.isDestroyed()) return
           for (const s of predictionSeries(
               predRes.data.data.content, sitesRef.current, fromIso, toIso)) {
-            addTimeSeriesSite(compareDs, s, gridCfg, MAP_CONFIG.markers.prediction,
-              'AI 예측 시계열')
+            addTimeSeriesSite(compareDs, s, gridCfg,
+              'AI 예측 시계열', MAP_CONFIG.markerEmojis.prediction)
           }
           for (const s of interpolationSeries(idwRes.data.data.content, fromIso, toIso)) {
-            addTimeSeriesSite(compareDs, s, gridCfg, MAP_CONFIG.markers.interpolation,
-              'IDW 보간 시계열')
+            addTimeSeriesSite(compareDs, s, gridCfg,
+              'IDW 보간 시계열', MAP_CONFIG.markerEmojis.interpolation)
           }
         } else {
           const [predRes, idwRes] = await Promise.all([
@@ -1576,8 +1620,8 @@ export default function MapPage() {
           if (cancelled || compare.isDestroyed()) return
           for (const p of predRes.data.data) {
             addMarker(compareDs, p.longitude, p.latitude, `${p.siteName} (예측)`,
-              MAP_CONFIG.markers.prediction,
-              buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude))
+              buildDescription('AI 예측값', p.pm25, p.predictedAt, p.latitude, p.longitude),
+              undefined, MAP_CONFIG.markerEmojis.prediction)
             addStaticGrid(compareDs, p.longitude, p.latitude, p.pm25, p.siteName, 'AI 예측값',
               gridCfg)
           }
@@ -1588,8 +1632,8 @@ export default function MapPage() {
             seen.add(key)
             const name = r.targetName ?? `보간지점 ${r.id}`
             addMarker(compareDs, r.longitude, r.latitude, name,
-              MAP_CONFIG.markers.interpolation,
-              buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude))
+              buildDescription('IDW 보간값', r.pm25, r.interpolatedAt, r.latitude, r.longitude),
+              undefined, MAP_CONFIG.markerEmojis.interpolation)
             addStaticGrid(compareDs, r.longitude, r.latitude, r.pm25, name, 'IDW 보간값',
               gridCfg)
           }
@@ -1878,10 +1922,7 @@ export default function MapPage() {
               checked={layers[key]}
               onChange={(e) => setLayers({ ...layers, [key]: e.target.checked })}
             />
-            <span
-              className="inline-block h-3 w-3 rounded-full"
-              style={{ backgroundColor: MAP_CONFIG.markers[key] }}
-            />
+            <span aria-hidden="true">{MAP_CONFIG.markerEmojis[key]}</span>
             {LAYER_LABELS[key]}
           </label>
         ))}

@@ -103,6 +103,32 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("중복되거나 참조 관계에 위배되는 데이터입니다."));
     }
 
+    /**
+     * 응답 JSON 전송 중 실패. 원인 체인에 IOException이 있으면 클라이언트(브라우저)가
+     * 페이지 이동·새로고침·요청 취소로 연결을 먼저 끊은 것이므로 서버 장애가 아니다 —
+     * 스택 없이 조용히 기록하고, 이미 끊긴 연결에는 응답을 다시 쓰지 않는다(null 반환).
+     * IOException이 없으면(직렬화 버그 등) 실제 오류이므로 공통 500 처리로 넘긴다.
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotWritableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotWritable(
+            org.springframework.http.converter.HttpMessageNotWritableException e) {
+        if (hasIoCause(e)) {
+            log.debug("응답 전송 중 클라이언트가 연결을 끊었습니다 (새로고침/페이지 이동 추정): {}",
+                    e.getMessage());
+            return null;
+        }
+        return handleUnexpected(e);
+    }
+
+    private static boolean hasIoCause(Throwable e) {
+        for (Throwable t = e.getCause(); t != null && t != t.getCause(); t = t.getCause()) {
+            if (t instanceof java.io.IOException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception e) {
         log.error("처리되지 않은 오류", e);

@@ -3,7 +3,7 @@
 > 상태 정의: NOT_STARTED / IN_PROGRESS / BLOCKED / COMPLETED(코드 작성 완료) / VERIFIED(실행·테스트 성공 확인)
 > 갱신 규칙: 각 작업 완료 시 본 문서를 갱신한다. 테스트를 실행하지 못한 경우 사유를 기록한다.
 
-최종 갱신: 2026-07-25
+최종 갱신: 2026-07-27
 
 ## Phase 요약
 
@@ -48,6 +48,7 @@
 | 36 | 관측 데이터·공공 대기질 화면 시각화 보강 | COMPLETED | 사용자 피드백(두 화면이 표 위주로 단순). 관측 데이터: 기간 필터 + 요약 카드(평균·최고·등급 분포 바) + PM2.5 추이 차트 + 표 미니 바. 공공 대기질: 실시간 측정 현황 섹션 신설(측정소별 등급색 바), 주간예보 권역×날짜 매트릭스, 경보 필터, 악취 상위 10 바 차트·사업소 필터. 프론트 전용, Vitest 신규 6건(총 61건). **API 실기동 검증(2026-07-26)**. 화면 육안 확인 잔여 |
 | 37 | 샘플 관측값 자동 보충 (대시보드 24시간 차트 공백 해결) | VERIFIED | 사용자 결함 신고(시간별 평균 차트 무데이터). 원인: 리시드가 수동(기본 비활성)이라 마지막 실행(07-22) 후 24시간 창이 다시 벗어남. SampleObservationReseeder에 자동 보충 모드 추가 — 기동 시 + 매시 5분, 기본 켜짐(SAMPLE_AUTO_RESEED=false로 끔), 빠진 시간대만 채움. 테스트 5건(기존 2건 개편+신규 3건). **실기동 검증(2026-07-26)**: 기동 리시드 1,324개 시간대 추가 → hourly 24포인트 복구 |
 | 38 | 최종보고서 잔여 격차 3종 (면적·고도 측정 / 7×7×3 격자 / 사용자 관리·마이페이지) | VERIFIED | 보고서 재점검(Phase 19 이후 잔여분). ① 면적(다각형+㎢)·고도(지형+객체) 측정 추가, ② 입체격자 세밀도 토글(기본 3×3×2 / 상세 7×7×3 = 보고서 규격), ③ /api/users CRUD + 마이페이지 비밀번호 변경(그룹 관리는 CLAUDE.md 금지로 제외 유지). 백엔드 신규 15건·프론트 65건 통과. **실 DB API + Playwright 육안 검증(2026-07-27)** |
+| 39 | 환경변수 정비 + 실키 결함 2건 수정 (.env 한글 인코딩 / CCTV 실키 0건) | VERIFIED | ① .env 누락 15개 항목 보충 중 AIRKOREA_DEFAULT_SIDO=인천이 properties(ISO-8859-1) 파싱으로 깨져 /api/air-quality/current 400 → 유니코드 이스케이프(\uC778\uCC9C)로 수정. ② ITS 실키 첫 적용 시 CCTV 0건 — 원인: type=its(국도)만 조회하는데 인천 3구 실시간 CCTV는 전부 고속도로(ex) 소관 → type=all로 수정, 실키 36대(남동 23·미추홀 10·연수 3) 확인. **실키 실기동 검증(2026-07-27)** |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -1556,3 +1557,166 @@ wind_direction)를 그대로 사용한다.
 - 상세(7×7×3) 격자는 관측소당 147박스로 엔티티 수가 약 8배 늘어 저사양 GPU에서
   프레임이 낮아질 수 있어 기본값은 3×3×2를 유지(토글 제공)
 - 사용자 그룹 관리(보고서 그림 3-62~64)는 CLAUDE.md 금지사항이라 의도적으로 제외
+
+## Phase 39. 환경변수 정비 + 실키 결함 2건 수정 — VERIFIED (2026-07-27)
+
+### 배경
+
+사용자가 .env 누락 항목 보충을 요청 → .env.example 기준 15개 항목 추가.
+이후 실키 적용 과정에서 결함 2건이 드러나 수정.
+
+### 결함 1: /api/air-quality/current 400 (한글 환경변수 인코딩)
+
+- 증상: 지도 로드 시 400 Bad Request, 메시지 "지원하지 않는 시도명입니다: ì¸ì²"
+- 원인: .env는 spring.config.import가 properties 파일(ISO-8859-1)로 파싱하므로
+  UTF-8 한글 값(AIRKOREA_DEFAULT_SIDO=인천)이 깨짐. 기존에는 이 변수가 .env에
+  없어 application.yml(UTF-8) 기본값이 쓰여 드러나지 않았음
+- 수정: 값을 유니코드 이스케이프로 입력(.env·.env.example 주석에 규칙 명시,
+  docs/public-data-api-integration.md에도 주의 추가)
+
+### 결함 2: 실키 적용 후 CCTV 지도 미표시 (0건)
+
+- 증상: ITS_CCTV_KEY 실키 입력 후 /api/cctv/streams가 mock=false, count=0
+- 원인: CctvClient가 type=its(국도)만 조회하는데, 인천 핵심 3구 범위의 실시간
+  스트리밍 CCTV는 전부 고속도로(ex) 소관 — ITS API 직접 호출로 확인
+  (type=its 0건, type=all 47건/3구 필터 후 43건)
+- 수정: type=all(고속도로+국도)로 변경 (CctvClient.java 1행)
+
+### 테스트·검증 결과
+
+- gradlew test --tests "*Cctv*" BUILD SUCCESSFUL
+- 실키 실기동 검증(2026-07-27): /api/air-quality/current 200 (sido=인천,
+  mock=false, 석바위 등 실측정소 수신) / /api/cctv/streams 200 (mock=false,
+  36대: 남동구 23·미추홀구 10·연수구 3, HLS streamUrl 포함)
+- 브라우저 육안 확인 잔여 (지도 새로고침 시 📹 마커 표시 예상)
+
+### 변경 파일
+
+- `.env` · `.env.example`(누락 항목 보충 + 한글 이스케이프 규칙)
+- `backend/.../cctv/CctvClient.java`(type=its→all)
+- `docs/public-data-api-integration.md`(한글 인코딩 주의)
+- `docs/progress.md`(본 절)
+
+## Phase 40. 지도 마커 이모지 아이콘화 — VERIFIED (2026-07-27)
+
+사용자 요청: CCTV 마커를 CCTV 모양 아이콘/이모지로, 다른 지점 마커도 의미가 통하는
+이모지로 바꿔 이해하기 쉽게. 색상 의미(레이어색·등급색)는 유지.
+
+### 구현 내용 (프론트 전용 — 백엔드 변경 없음)
+
+- [x] `markerIcon(emoji, color)` (`MapPage.tsx`): 색상 원(흰 테두리) 배경 + 이모지를
+      64px 캔버스에 그려 Cesium 빌보드 이미지로 사용(이모지|색 조합별 캐시).
+      색은 기존 의미(레이어·등급) 유지, 이모지는 지점 종류를 표시 — VERIFIED
+- [x] `mapConfig.ts markerEmojis`: 레이어별 이모지 정의 — 관측 📡 · AI 예측 🤖 ·
+      IDW 보간 🧮 · 공공 실측 🏛️ · 실측 IDW 표면 🗺️ · 경보 ⚠️ · 악취 👃 ·
+      바람 💨 · 이동 예측 🌫️ · CCTV 📹
+- [x] 지점 마커 전면 교체(포인트 → 이모지 빌보드): `addMarker`(관측·예측·보간·공공,
+      듀얼맵 비교 뷰 포함), `addTimeSeriesSite`(시계열 마커), `addPublicStation`(등급색·
+      데이터 없음 회색 배경 유지), `addPublicTimeSeries`, `addOdorSpot`(악취 등급색 배경,
+      라벨의 👃 중복 제거), `addCctvCamera`(라벨의 📹 중복 제거) — VERIFIED
+- [x] CCTV 추정 배지(`handleCctvEstimated`): 포인트 색 변경 → 빌보드 배경색을 추정
+      등급색으로 교체하는 방식으로 이관
+- [x] 레이어 토글 UI: 색상 점 → 레이어색 원 안에 이모지 표시(지도 마커와 동일 모양)
+
+### 테스트·검증 결과 (2026-07-27)
+
+- 프론트 `tsc --noEmit`·`vite build`·Vitest 65건 통과
+- Playwright 육안 확인(기동 중이던 dev 서버 + 백엔드): /map 로그인 후 CCTV 📹
+  (장미색 원)·공공 실측 🏛️(하늘색 원) 마커와 레이어 토글 이모지 렌더 확인
+
+### 변경 파일
+
+- `frontend/src/config/mapConfig.ts`(markerEmojis 추가)
+- `frontend/src/pages/MapPage.tsx`(markerIcon 헬퍼 + 마커 빌보드 교체)
+- `docs/user-guide.html`(§7 마커 안내 + v1.28), `docs/progress.md`(본 절)
+
+### 알려진 한계
+
+- 이모지 모양은 OS·브라우저 이모지 폰트에 따라 다르게 보일 수 있음(캔버스 렌더 특성)
+- 시계열 재생·듀얼맵·악취 등 일부 마커는 코드 경로는 동일하나 화면 육안 확인은
+  CCTV·공공 실측 기준으로만 수행
+
+## Phase 41. CCTV 캡처 보안 오류 수정 + 마커 이모지 단순화 — VERIFIED (2026-07-27)
+
+사용자 신고·요청: ① CCTV "이 화면으로 미세먼지 추정"이 보안 제한 안내로 실패,
+② Phase 40의 색상 원 배경이 오히려 복잡해 보임 → 이모지만 표시하되 눈에 잘 보이게.
+
+### ① CCTV 화면 캡처 SecurityError — 근본 원인과 수정
+
+- **재현·증거**: 실키 환경에서 브라우저(A/B 실험)로 확인 —
+  `canPlayType('application/vnd.apple.mpegurl')`이 최신 Chromium에서 `'maybe'`를
+  반환해 hls.js(MSE)가 아닌 **네이티브 HLS 직접 재생 경로**를 탄다.
+  crossOrigin 미설정 교차 출처 미디어 → 캔버스 오염 → `toBlob`이 SecurityError.
+  같은 페이지에서 `crossOrigin='anonymous'`만 설정하면 캡처 성공(112KB JPEG) —
+  ITS 스트림 서버(Nimble)가 `Access-Control-Allow-Origin: *` 응답을 주는 것을 확인
+- **수정** (`MapPage.tsx` CctvPlayerModal effect): 네이티브 재생 경로에서
+  `video.crossOrigin = 'anonymous'` 설정. CORS 미지원 스트림 대비로 video error 시
+  crossOrigin 없이 1회 재시도(재생 유지, 캡처는 기존 보안 안내로 처리)
+- Phase 32 당시엔 Chromium이 HLS 네이티브 미지원이라 hls.js 경로(오염 없음)만 탔음 —
+  브라우저 업데이트로 드러난 문제
+
+### ② 마커 이모지 단순화 (Phase 40 스타일 교체)
+
+- `markerIcon(emoji)`: 색상 원 배경 제거, 이모지만 캔버스에 그림.
+  흰 후광(shadowBlur 겹침) + 옅은 그림자로 위성 영상·밝은 지도 모두에서 가독 확보
+- `addMarker`/`addTimeSeriesSite`의 색상 파라미터 제거,
+  미사용이 된 `mapConfig.ts markers`(레이어별 색) 블록 삭제.
+  CCTV 추정 성공 시 아이콘 색 변경도 제거(등급은 라벨 배지 텍스트로 표시)
+- 레이어 토글 UI: 색상 원 없이 이모지만 표시
+
+### 테스트·실기동 검증 (2026-07-27, 백엔드+프론트+AI 서비스 실키 기동)
+
+- 프론트 `tsc --noEmit`·`vite build`·Vitest 65건 통과
+- Playwright 육안·기능 검증: /map 이모지 마커 렌더(위성 배경에서 후광 가독 확인) →
+  CCTV 마커 클릭 → 모달 재생(crossOrigin=anonymous, 853×480) →
+  "이 화면으로 미세먼지 추정" → **실제 화면 캡처로 AI 추론 성공**
+  (resnet18_multimodal_v1, PM2.5 63.3 나쁨 · 기준 관측소 연수동춘 · 실측 온습도 자동 사용),
+  마커 라벨에 추정 배지 표시 확인. 검증 후 서버 종료, 8080/5173/8000 포트 해제 확인
+
+### 변경 파일
+
+- `frontend/src/pages/MapPage.tsx`(crossOrigin 수정 + markerIcon 단순화)
+- `frontend/src/config/mapConfig.ts`(markers 색 블록 제거)
+- `docs/user-guide.html`(§1·§7·v1.29), `docs/progress.md`(본 절)
+
+### 알려진 한계
+
+- 마커에서 등급색이 빠지면서 농도 등급은 라벨 텍스트·격자/막대 색으로만 구분됨
+  (CCTV 추정 배지도 텍스트로 표시)
+- CORS를 지원하지 않는 스트림에서는 재생만 되고 캡처는 보안 안내가 뜨는 것이 정상
+  (ITS 실스트림은 CORS 허용 확인됨)
+
+## Phase 42. 클라이언트 연결 끊김 로그 소음 수정 — VERIFIED (2026-07-27)
+
+사용자 신고: 백엔드에 `HttpMessageNotWritableException: Could not write JSON:
+ServletOutputStream failed to write: java.io.IOException: 현재 연결은 사용자의 호스트
+시스템의 소프트웨어의 의해 중단되었습니다` 오류 발생.
+
+### 원인 분석
+
+- 응답 JSON 전송 도중 브라우저가 연결을 먼저 끊으면(새로고침·페이지 이동·탭 닫기·요청
+  취소) 소켓 IOException이 HttpMessageNotWritableException으로 래핑되어 올라온다 —
+  서버 장애가 아닌 정상적인 클라이언트 이탈
+- 기존 GlobalExceptionHandler의 catch-all(Exception)이 이를 "처리되지 않은 오류"로
+  ERROR + 전체 스택으로 기록하고, 이미 끊긴 연결에 500 JSON을 다시 쓰려 시도해
+  실제 장애처럼 보이는 로그가 남았음
+
+### 수정 (`GlobalExceptionHandler`)
+
+- [x] `handleNotWritable` 추가: HttpMessageNotWritableException의 원인 체인에
+      IOException이 있으면 클라이언트 연결 끊김으로 판단 → DEBUG 한 줄만 기록하고
+      null 반환(끊긴 연결에 응답 재작성 안 함). IOException이 없으면(직렬화 버그 등
+      실제 오류) 기존 공통 500 처리로 위임 — VERIFIED
+- 판별 기준: Boot 4(Jackson 3)에서는 직렬화 실패가 RuntimeException 계열
+  (DatabindException)로 오므로, 체인 내 IOException 존재 = 소켓 끊김으로 안전하게 구분
+
+### 테스트
+
+- `GlobalExceptionHandlerTest` 신규 3건(중첩 IOException·직접 IOException → null /
+  비IO 원인 → 500) 통과, `gradlew test` 전체 통과
+
+### 변경 파일
+
+- `backend/src/main/java/com/airvision/backend/common/GlobalExceptionHandler.java`
+- `backend/src/test/java/com/airvision/backend/common/GlobalExceptionHandlerTest.java`(신규)
+- `docs/progress.md`(본 절 — 화면·절차 변경 없음, user-guide 해당 없음)

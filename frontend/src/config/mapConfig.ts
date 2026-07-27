@@ -33,18 +33,18 @@ export const MAP_CONFIG = {
     detailed: { label: '상세 (7×7×3)', countX: 7, countY: 7, countZ: 3, spacing: 260, boxSize: 220 },
   },
 
-  /** 레이어별 아이콘 색상 */
-  markers: {
-    observation: '#2563eb',
-    prediction: '#f97316',
-    interpolation: '#8b5cf6',
-    airkorea: '#0ea5e9',
-    idwSurface: '#14b8a6',
-    alertRegion: '#dc2626',
-    odor: '#a16207',
-    wind: '#06b6d4',
-    advection: '#64748b',
-    cctv: '#f43f5e',
+  /** 레이어별 마커 이모지 — 지점 마커·레이어 토글에 이모지 아이콘으로 표시한다 */
+  markerEmojis: {
+    observation: '📡',
+    prediction: '🤖',
+    interpolation: '🧮',
+    airkorea: '🏛️',
+    idwSurface: '🗺️',
+    alertRegion: '⚠️',
+    odor: '👃',
+    wind: '💨',
+    advection: '🌫️',
+    cctv: '📹',
   },
 
   /** 경보 발령 시도 강조 (반투명 원) */

@@ -35,13 +35,16 @@ AIRKOREA_SERVICE_KEY=your_airkorea_service_key
 KMA_SERVICE_KEY=your_kma_service_key
 AIRKOREA_BASE_URL=https://apis.data.go.kr/B552584
 KMA_BASE_URL=https://apis.data.go.kr/1360000
-AIRKOREA_DEFAULT_SIDO=인천
+AIRKOREA_DEFAULT_SIDO=\uC778\uCC9C
 PUBLIC_DATA_MOCK_ENABLED=auto
 AIR_QUALITY_CACHE_TTL=1800
 WEATHER_CACHE_TTL=1800
 COMPARISON_MAX_DISTANCE_KM=5
 COMPARISON_MAX_MINUTES=60
 ```
+
+**주의**: `.env`는 Spring이 properties 파일(ISO-8859-1)로 읽으므로 한글 값을 그대로 쓰면 깨진다.
+`AIRKOREA_DEFAULT_SIDO` 같은 한글 값은 유니코드 이스케이프로 입력한다. (\uC778\uCC9C = 인천)
 
 실제 키를 코드·문서·Git에 넣지 않는다. 로그에도 키를 출력하지 않는다.
 
