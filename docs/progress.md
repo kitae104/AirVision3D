@@ -3,7 +3,7 @@
 > 상태 정의: NOT_STARTED / IN_PROGRESS / BLOCKED / COMPLETED(코드 작성 완료) / VERIFIED(실행·테스트 성공 확인)
 > 갱신 규칙: 각 작업 완료 시 본 문서를 갱신한다. 테스트를 실행하지 못한 경우 사유를 기록한다.
 
-최종 갱신: 2026-07-27
+최종 갱신: 2026-08-02
 
 ## Phase 요약
 
@@ -49,6 +49,8 @@
 | 37 | 샘플 관측값 자동 보충 (대시보드 24시간 차트 공백 해결) | VERIFIED | 사용자 결함 신고(시간별 평균 차트 무데이터). 원인: 리시드가 수동(기본 비활성)이라 마지막 실행(07-22) 후 24시간 창이 다시 벗어남. SampleObservationReseeder에 자동 보충 모드 추가 — 기동 시 + 매시 5분, 기본 켜짐(SAMPLE_AUTO_RESEED=false로 끔), 빠진 시간대만 채움. 테스트 5건(기존 2건 개편+신규 3건). **실기동 검증(2026-07-26)**: 기동 리시드 1,324개 시간대 추가 → hourly 24포인트 복구 |
 | 38 | 최종보고서 잔여 격차 3종 (면적·고도 측정 / 7×7×3 격자 / 사용자 관리·마이페이지) | VERIFIED | 보고서 재점검(Phase 19 이후 잔여분). ① 면적(다각형+㎢)·고도(지형+객체) 측정 추가, ② 입체격자 세밀도 토글(기본 3×3×2 / 상세 7×7×3 = 보고서 규격), ③ /api/users CRUD + 마이페이지 비밀번호 변경(그룹 관리는 CLAUDE.md 금지로 제외 유지). 백엔드 신규 15건·프론트 65건 통과. **실 DB API + Playwright 육안 검증(2026-07-27)** |
 | 39 | 환경변수 정비 + 실키 결함 2건 수정 (.env 한글 인코딩 / CCTV 실키 0건) | VERIFIED | ① .env 누락 15개 항목 보충 중 AIRKOREA_DEFAULT_SIDO=인천이 properties(ISO-8859-1) 파싱으로 깨져 /api/air-quality/current 400 → 유니코드 이스케이프(\uC778\uCC9C)로 수정. ② ITS 실키 첫 적용 시 CCTV 0건 — 원인: type=its(국도)만 조회하는데 인천 3구 실시간 CCTV는 전부 고속도로(ex) 소관 → type=all로 수정, 실키 36대(남동 23·미추홀 10·연수 3) 확인. **실키 실기동 검증(2026-07-27)** |
+| 40 | 프론트엔드 디자인 시스템 도입 + 전 화면 리뉴얼 | VERIFIED | 사용자 피드백(세련되지 않고 항목이 많아 눈에 안 들어옴). 디자인 토큰(@theme)·다크 모드·Pretendard·공통 UI 컴포넌트 11종 신설, 사이드바 3그룹+아이콘·상단 헤더 셸, 대시보드 히어로+3섹션 재편, 3D 지도 컨트롤 15여 개를 지도 위 플로팅 패널로 이전, 나머지 9개 화면 토큰 적용. 기능 변경 없음. **tsc·oxlint·vite build·Vitest 65건 통과 + Playwright 12화면 육안 검증(라이트/다크, 콘솔 오류 0건, 2026-08-02)** |
+| 41 | 데이터 종류별 색 체계 + 전 화면 요약 배너 확대 | VERIFIED | 사용자 피드백("대시보드 스타일 좋다. 3D 지도 뺀 나머지에도 적용하되 종류별로 색을 구분해 달라"). config/dataKinds.ts에 6종 액센트(자체 관측 인디고 / AI 예측 바이올렛 / IDW 보간 푸시아 / 공공 대기질 틸 / 악취 핑크 / 계정 슬레이트) 정의 — 등급색과 색상환에서 떨어진 구간만 사용. PageHero 컴포넌트 신설 후 9개 화면에 적용, SectionHeading·StatTile에 accent 지원, 대시보드 섹션·차트 계열색도 종류색으로 통일. **tsc·oxlint·vite build·Vitest 65건 통과 + Playwright 12화면 육안 검증(2026-08-02)** |
 
 ## Phase 0. 저장소 분석과 계획 — COMPLETED
 
@@ -1720,3 +1722,271 @@ ServletOutputStream failed to write: java.io.IOException: 현재 연결은 사�
 - `backend/src/main/java/com/airvision/backend/common/GlobalExceptionHandler.java`
 - `backend/src/test/java/com/airvision/backend/common/GlobalExceptionHandlerTest.java`(신규)
 - `docs/progress.md`(본 절 — 화면·절차 변경 없음, user-guide 해당 없음)
+
+## Phase 40. 프론트엔드 디자인 시스템 도입 + 전 화면 리뉴얼 — VERIFIED (2026-08-02)
+
+> 사용자 요청: "전체적인 디자인이 세련된 느낌이 안 들고 항목들이 많다 보니 눈에 잘 안 들어온다.
+> 내용·기능 파악이 쉽도록 전체 디자인을 사용자에게 친숙하게 바꿔 달라."
+> 브레인스토밍으로 확정한 방향: 시각 + 정보구조 재편 / 라이트 기본 + 다크 모드 토글 /
+> 사이드바 역할별 그룹 + 아이콘 / 대시보드 히어로 카드 + 섹션 분리 / 지도는 플로팅 패널.
+> **기능 추가·삭제는 없다.** 기존 기능을 그대로 두고 배치·시각 위계만 재설계했다.
+
+### 문제 분석 (변경 전)
+
+- `index.css`가 `@import "tailwindcss";` 한 줄뿐 — 디자인 토큰이 없어 11개 파일에
+  `rounded-lg border border-gray-200 bg-white p-4 shadow-sm`가 흩어져 있었음
+- 사이드바 9개 메뉴 평면 나열, 계층 없음
+- 대시보드: 동일 무게의 카드 10 + 차트 4 → 무엇이 핵심인지 판단 불가
+- 3D 지도: 컨트롤 15여 개가 화면 상단 한 줄에 밀집, 지도 영역을 세로로 압박
+- 색 규칙 부재: `blue-600` 버튼과 `blue-100` "좋음" 배지가 섞여 파란색의 의미가 모호
+
+### 구현 내용
+
+**① 디자인 토큰 (`frontend/src/index.css`)**
+- Tailwind v4 `@theme inline` + CSS 변수로 라이트/다크 2벌 토큰 정의
+  (canvas/surface/line/ink/brand + 등급색 5종, radius·shadow)
+- **색 원칙 확립**: 파랑·초록·주황·빨강은 대기질 등급 전용, 인터랙션은 브랜드(인디고)
+- `@custom-variant dark`, 접근성 기본선(`:focus-visible` 아웃라인, `prefers-reduced-motion`)
+- Pretendard Variable(동적 서브셋) 번들 — CDN 미사용, 오프라인 실행 유지
+- 숫자 흔들림 방지용 `.num`(tabular-nums)
+
+**② 테마 (`store/theme.ts`, `components/ThemeToggle.tsx`)**
+- zustand persist + localStorage, 초기값은 `prefers-color-scheme`
+- `main.tsx`에서 첫 페인트 전에 적용해 라이트/다크 깜빡임 제거
+
+**③ 공통 UI 컴포넌트 (`components/ui/`)**
+- Card/CardHeader, SectionHeading, StatTile, GradeBadge, Button, Toggle, Notice,
+  EmptyState, Skeleton, Table 6종, controls(input/select/label/toolbar 클래스),
+  chartTheme(Recharts용 테마별 색 + Tooltip 스타일)
+
+**④ 앱 셸 (`components/Layout.tsx`, `components/navItems.ts`)**
+- 사이드바를 **현황 보기 / AI 분석 / 관리** 3그룹 + lucide 아이콘으로 재구성, 접기 지원
+- **상단 헤더 신설**: 현재 화면 이름·설명(경로에서 자동), 다크 모드 토글, 계정, 로그아웃
+  → 각 페이지가 중복으로 그리던 `<h2>` 제거
+- 경보 배너 2종 스타일 통일(아이콘 + 제목/부연 2줄)
+
+**⑤ 대시보드 (`pages/DashboardPage.tsx`)**
+- **히어로 카드**: 큰 등급색 숫자 + 등급 배지 + 행동 안내 한 줄(`grades.ts`에 `advice` 추가)
+  + 24시간 스파크라인 + 보조 사실 5개(PM10·기온·습도·바람·관측소). 카드 배경에 등급색 옅은 워시
+- 나머지를 **오늘의 현황 / AI 분석 / 데이터 축적** 3섹션으로 분리(카드 10 → 섹션당 3)
+- 로딩을 스켈레톤으로, 빈 상태를 "다음에 할 일" 문구로 교체
+
+**⑥ 3D 지도 (`pages/MapPage.tsx`, `components/map/panel.tsx`)**
+- 상단 컨트롤 줄 전체를 **지도 위 왼쪽 플로팅 패널**로 이전 —
+  지역 / 레이어 / 시간 / 도구 / 데이터 상태 5개 접이식 구역
+- 레이어 10종을 **자체 데이터 / 공공 데이터 / 예측 시뮬레이션**으로 그룹화, 체크박스 → 토글 스위치
+- 등급 범례는 오른쪽 아래 고정(Cesium 타임라인 위), 오류·Mock·로딩은 상단 중앙 토스트
+- 패널 높이를 Cesium 재생 위젯(좌하단) 위까지로 제한해 겹침 방지
+- 지도가 화면을 가득 채우도록 `Layout`에 지도 전용 full-bleed 처리
+
+**⑦ 나머지 9개 화면** — 로그인(브랜드 마크·배경 그라데이션·테마 토글), 관측 데이터,
+공공 대기질, AI 예측, IDW 보간, 모델 성능, 데이터 등록, 사용자 관리, 마이페이지 전부
+공통 컴포넌트·토큰으로 교체하고 다크 모드 대응
+
+### 변경 파일
+
+- 신규: `frontend/src/store/theme.ts`, `frontend/src/components/ThemeToggle.tsx`,
+  `frontend/src/components/navItems.ts`, `frontend/src/components/map/panel.tsx`,
+  `frontend/src/components/ui/` 11개 파일
+- 수정: `index.css`, `main.tsx`, `components/Layout.tsx`, `AlertBanner.tsx`,
+  `PreAlertBanner.tsx`, `RegionSelector.tsx`, `config/grades.ts`, `config/odorGrades.ts`,
+  `pages/` 10개 전부, `package.json`(pretendard·lucide-react 추가)
+- 문서: `docs/progress.md`(본 절), `docs/user-guide.html`(v1.30 — 5장 공통 구성 신설,
+  6장 대시보드 재작성, 7장 지도 조작 위치 갱신, 업데이트 이력)
+
+### 실행한 명령 / 테스트 결과
+
+- `npx tsc -b` — 통과(오류 0)
+- `npm run lint`(oxlint) — 통과(경고 0)
+- `npm run build` — 통과(3.11s)
+- `npm test`(Vitest) — **65건 전부 통과** (기존 테스트 무수정 통과 = 동작 회귀 없음)
+- Playwright 육안 검증(2026-08-02, 1512×900, 백엔드 실기동):
+  로그인 → 대시보드(라이트/다크) → 3D 지도 → 관측 데이터 → 공공 대기질 → AI 예측 →
+  IDW 보간 → 모델 성능 → 데이터 등록 → 사용자 관리 → 마이페이지 **12화면 정상 렌더,
+  콘솔 오류 0건**
+
+### 미완료 항목
+
+- 없음 (요청 범위 전부 반영)
+
+### 알려진 문제
+
+- 모바일 폭(<768px) 전용 레이아웃은 다루지 않았다. 데스크톱·태블릿 기준 설계이며
+  사이드바 접기로 좁은 화면을 일부 흡수한다.
+- `MapPage.tsx`가 여전히 2,300줄대다. 이번에는 컨트롤 패널의 표현 부분만
+  `components/map/panel.tsx`로 분리했고, 데이터 로딩·Cesium 엔티티 생성 로직 분해는
+  요청 범위 밖이라 하지 않았다.
+
+### 다음 권장 작업
+
+- 모바일 대응이 필요하면 사이드바를 오프캔버스 서랍으로 전환
+- `MapPage`를 레이어별 훅으로 분해(관측/공공/바람/CCTV) — 별도 작업으로 계획 필요
+
+## Phase 41. 데이터 종류별 색 체계 + 전 화면 요약 배너 확대 — VERIFIED (2026-08-02)
+
+> 사용자 요청: "대시보드에 적용된 스타일 좋아. 3D 지도를 제외한 나머지 페이지에도 유사한
+> 스타일을 적용해줘. 단 종류별는 같은색 스타일을 적용하고 다른 종류는 다른 색을 적용해서
+> 구분될 수 있도록 해줘."
+
+### 설계 결정
+
+Phase 40에서 "색은 대기질 등급 전용"으로 정했기 때문에, 종류 구분색을 추가하면서
+두 색 체계가 충돌하지 않도록 역할을 나눴다.
+
+- **등급색**(파랑 #3b82f6 · 초록 #22c55e · 주황 #f97316 · 빨강 #ef4444) — 값에만 쓴다.
+  큰 숫자, 배지, 표의 미니 바, 등급 분포.
+- **종류색** — 값이 아니라 *틀*에 쓴다. 요약 배너 배경 워시, 구역 제목 왼쪽 막대,
+  지표 타일의 아이콘·왼쪽 띠, 차트 계열선.
+- 종류색은 색상환에서 등급색(0°·30°·140°·220°)과 떨어진 구간만 골랐다.
+
+| 종류 | 라이트 | 다크 | 적용 화면 |
+|---|---|---|---|
+| 자체 관측 | `#4f46e5` 인디고 | `#818cf8` | 관측 데이터, 데이터 등록, 대시보드 관측 계열 |
+| AI 예측 | `#7c3aed` 바이올렛 | `#a78bfa` | AI 예측, 모델 성능, 대시보드 AI 분석 |
+| IDW 보간 | `#a21caf` 푸시아 | `#e879f9` | IDW 보간, 대시보드 보간 지표 |
+| 공공 대기질 | `#0f766e` 틸 | `#2dd4bf` | 공공 대기질, 대시보드 오늘의 현황 |
+| 악취 측정 | `#db2777` 핑크 | `#f472b6` | 공공 대기질 화면의 악취 절 |
+| 계정·관리 | `#475569` 슬레이트 | `#94a3b8` | 사용자 관리, 마이페이지 |
+
+같은 종류는 화면이 달라도 같은 색을 쓴다. 예를 들어 관측값은 관측 데이터 화면의 배너,
+데이터 등록 화면의 배너, 대시보드의 시간별 평균 그래프에서 모두 인디고다.
+
+### 구현 내용
+
+- `config/dataKinds.ts`(신규) — 종류별 라이트/다크 hex와 배경 워시 생성 함수
+- `components/ui/chartTheme.ts` — `useKindColor(kind)` 추가. 화면 액센트와 차트 계열색이
+  같은 값을 쓰도록 진입점을 하나로 뒀다.
+- `components/ui/PageHero.tsx`(신규) — 대시보드 히어로를 일반화한 요약 배너
+  (종류색 워시 + 큰 값 + 등급 배지 + 설명 + 보조 사실 + 우측 슬롯 + 액션 슬롯)
+- `SectionHeading` / `StatTile` — `accent` prop 추가(왼쪽 막대·아이콘·좌측 띠에 종류색)
+- 화면별 적용
+  - 관측 데이터: 평균 PM2.5 배너(필터를 배너 액션으로 이동, 등급 분포를 우측 슬롯으로),
+    추이 차트·구역 제목 인디고
+  - 데이터 등록: 누적 관측값 건수 배너(관측소 수·최근 등록 지점·시각), 개별/일괄 구역 분리
+  - AI 예측: 최근(또는 방금 실행한) 예측값 배너, 누적 예측·모델·실측 대조 건수
+  - 모델 성능: MAE 배너(RMSE·등급 정확도·R²·모델). 테스트 세트 지표 로딩을 페이지로 올려
+    배너와 하위 구역이 같은 데이터를 쓰게 함
+  - IDW 보간: 최근 보간값 배너(누적 실행·알고리즘·기준 시각)
+  - 공공 대기질: 선택 지역·항목 평균 배너(시도·항목 선택을 배너로 이동해 중복 제거),
+    구역별로 공공=틸 / 악취=핑크 / AI 비교=바이올렛
+  - 사용자 관리·마이페이지: 슬레이트 배너
+  - 대시보드: 구역 제목과 차트 계열색을 종류색으로 교체
+    (시간별 평균=인디고, 예측=바이올렛, 공공 추이=틸, 보간 지표=푸시아)
+- 3D 지도는 요청대로 제외 (지도 위 플로팅 패널 구성 유지)
+
+### 변경 파일
+
+- 신규: `frontend/src/config/dataKinds.ts`, `frontend/src/components/ui/PageHero.tsx`
+- 수정: `components/ui/`(chartTheme·SectionHeading·StatTile·index),
+  `pages/` 9개(Dashboard·Observations·DataEntry·Predict·Metrics·Interpolation·PublicAir·Users·MyPage)
+- 문서: `docs/progress.md`(본 절), `docs/user-guide.html`(v1.31 — 5장 색 규칙 ②와 종류색 표)
+
+### 실행한 명령 / 테스트 결과
+
+- `npx tsc -b` · `npm run lint` · `npm run build` — 통과
+- `npm test`(Vitest) — 65건 전부 통과
+- Playwright 육안 검증(2026-08-02): 12화면 정상 렌더, 콘솔 오류 0건.
+  각 화면 배너·구역 막대가 배정한 종류색으로 표시되는 것 확인
+
+### 미완료 항목
+
+- 없음
+
+### 알려진 문제
+
+- 종류색 중 인디고(자체 관측)는 브랜드색과 같은 값이다. 버튼·활성 메뉴도 인디고라
+  관측 계열 화면에서는 둘이 구분되지 않는다. 관측을 "기본/우리 데이터"로 보는 해석이라
+  의도적으로 두었으나, 구분이 필요해지면 관측 종류색만 다른 색으로 빼면 된다.
+- 모바일 폭 대응은 Phase 40과 동일하게 범위 밖이다.
+
+---
+
+## Phase 42. 주요 그래프 three.js 3D 전환 — VERIFIED (2026-08-04)
+
+### 배경
+
+대시보드와 모델 성능 화면의 주요 그래프를 애니메이션이 가능한 3D로 만들어 달라는 요청.
+3D를 장식이 아니라 정보를 더 담는 수단으로 쓴다는 원칙을 세웠다.
+
+- 다계열 시계열은 Z축으로 계열을 앞뒤 분리해 선 겹침을 없앤다.
+- 산점도는 Z축에 시간 순서를 넣어 예측 정확도의 시간 변화를 드러낸다.
+
+설계·계획 문서
+
+- `docs/superpowers/specs/2026-08-04-threejs-3d-charts-design.md`
+- `docs/superpowers/plans/2026-08-04-threejs-3d-charts.md`
+
+### 적용 범위 (차트 3개)
+
+| 위치 | 기존 | 3D |
+|---|---|---|
+| 대시보드 · 시간별 평균 PM2.5 | AreaChart | 막대 24개 1열, 막대마다 값의 등급색 |
+| 대시보드 · 관측값 vs AI 예측값 | LineChart 2계열 | 막대 2열 Z축 분리 (관측 인디고 / 예측 바이올렛) |
+| 모델 성능 · 예측 vs 실측 산점도 | ScatterChart | 3D 산점 + y=x 기준면, Z=시간 순서 |
+
+범위 밖(recharts 유지): 히어로 스파크라인, 공공 실측 추이, AI 절대오차 추이,
+관측 데이터 화면 추이 차트.
+
+### 주요 구현 내용
+
+- `frontend/src/components/chart3d/` 한 폴더 안에만 three를 import 한다.
+  페이지는 데이터 배열과 계열 정의만 넘긴다.
+- 의존성은 `three@^0.185.1` + `@types/three@^0.185.3` 둘뿐이다.
+  R3F·drei·OrbitControls는 쓰지 않았다. 필요한 기능이 인스턴싱·레이캐스트·제한 회전뿐이라
+  선언형 추상화가 순이득이 아니고, React 19.2 호환 의존성을 늘리지 않기 위함이다.
+- **정지 렌더** — 진입 애니메이션이 끝나면 rAF 루프를 멈춘다. 드래그·호버·리사이즈·
+  테마 변경·데이터 변경 때만 다시 그린다. IntersectionObserver로 화면 밖이면 멈춘다.
+- **카메라 자동 맞춤** — 씬 경계 상자의 여덟 꼭짓점을 투영해 화면 범위를 재고,
+  거리와 시선 중심을 3회 반복해 조정한다. 고정 거리 방식은 캔버스 가로세로비를
+  반영하지 못해 차트가 작고 한쪽으로 치우쳐 보였다.
+- **회전** — 자체 포인터 핸들러. azimuth ±35°, polar 55~80°로 제한, 줌·팬 없음.
+- **호버** — raycaster로 인스턴스를 판정해 밝기를 올리고, 기존 2D 툴팁과 같은 스타일의
+  HTML 툴팁을 캔버스 위에 띄운다.
+- **폴백** — WebGL2 미지원 / `prefers-reduced-motion: reduce` / 렌더러 생성 실패 /
+  `webglcontextlost`이면 기존 recharts 차트를 그대로 렌더한다. 2D 코드는 삭제하지 않았다.
+- **지연 로딩** — `React.lazy`로 three를 초기 번들에서 분리. 내려받는 동안에는
+  각 차트가 이미 들고 있는 2D 폴백을 Suspense fallback으로 보여줘 화면이 비지 않는다.
+- 색 규칙은 기존 체계를 그대로 따랐다. 값(PM2.5 수치)은 등급색, 계열 구분은 종류색,
+  산점도 점은 기존 `MODEL_COLORS`(모델 구분)를 유지했다.
+
+### 변경 파일
+
+- 신규: `frontend/src/components/chart3d/` 11개
+  (`scale.ts`, `chart3dTheme.ts`, `axes.ts`, `useChart3DScene.ts`, `Chart3DCanvas.tsx`,
+  `Bar3DChart.tsx`, `Scatter3DChart.tsx`, `index.tsx`, 테스트 4개)
+- 수정: `pages/DashboardPage.tsx`, `pages/MetricsPage.tsx`, `frontend/package.json`
+- 문서: `docs/progress.md`(본 절), `docs/user-guide.html`(v1.32 — 8장·12장·이력),
+  설계·계획 문서 2건
+
+### 실행한 명령 / 테스트 결과
+
+- `npx tsc -b` · `npm run lint` · `npm run build` — 통과
+- `npm test`(Vitest) — 18파일 89건 전부 통과 (3D 관련 신규 24건 포함)
+- 빌드 산출물에서 코드 분할 확인: `axes-*.js` 543 kB(gzip 137 kB)가 three 청크로 분리,
+  `Bar3DChart-*.js` 3.5 kB / `Scatter3DChart-*.js` 4.1 kB
+- Playwright 육안·계측 검증(2026-08-04, 백엔드 기동 + 원격 PostgreSQL 연결 상태)
+  - 대시보드 3D 막대 2개, 모델 성능 3D 산점도 1개 정상 렌더, 콘솔 오류 0건
+  - 막대 색이 등급색으로 칠해짐(관측 22~27 ㎍/㎥ 구간 → 보통 초록) 확인
+  - 2계열 차트에서 관측(인디고) 앞줄 / 예측(바이올렛) 뒷줄 분리 확인
+  - 산점도 y=x 기준면이 대각 경사면으로 정상 표시, 시간축으로 점이 퍼짐 확인
+  - 호버 툴팁 확인 — "11시 / 평균 PM2.5 / 25.6 ㎍/㎥", 해당 막대만 밝아짐
+  - 드래그 회전 전후 렌더 결과가 달라지는 것 확인 (각도 제한 내)
+  - 다크 모드 전환 시 바닥·눈금·툴팁 색이 함께 바뀌는 것 확인
+  - 화면 밖으로 스크롤했다가 되돌아와도 정상 렌더 확인
+  - 진입 애니메이션 구간 rAF 콜백 200회 → **유휴 구간 0회/초** (정지 렌더 동작 확인,
+    같은 시점 브라우저 자체 프레임은 61fps로 정상)
+
+### 미완료 항목
+
+- 없음
+
+### 알려진 문제
+
+- 캔버스가 가로로 매우 길면(카드 폭 대비 높이가 낮으면) 세로가 맞춤 기준이 되어
+  좌우에 여백이 남는다. 3D 뷰의 일반적인 모습이라 그대로 두고 차트 높이를
+  380~460px로 키워 대응했다. 여백을 없애려면 월드 폭을 캔버스 비율에 맞춰
+  가변으로 바꿔야 하는데, 축·라벨 배치까지 함께 손봐야 해서 범위 밖으로 두었다.
+- 데이터가 바뀌면 씬을 다시 만들고 진입 애니메이션을 재생한다. 중간값 보간은 넣지 않았다.
+  이 화면들의 데이터는 사용자가 지역을 바꿀 때만 갱신되므로 재생이 자연스럽다.
+- 산점도 기준면은 `depthWrite: false`라 점이 항상 면 위에 그려진다.
+  면 뒤의 점이 가려지지 않아 판독에는 유리하지만, 앞뒤 관계는 각도를 돌려 확인해야 한다.
