@@ -89,10 +89,10 @@ export function buildAxes({ max, depth, xLabels, palette }: BuildAxesOptions): T
     ),
   )
 
-  // y 눈금 라벨
+  // y 눈금 라벨 — 앞쪽 막대에 가리지 않도록 바닥판 바깥으로 충분히 내보낸다
   for (const tick of ticks) {
     const sprite = makeTextSprite(formatTick(tick), palette.label)
-    sprite.position.set(-halfW - 0.45, (tick / max) * WORLD.height, -halfD - 0.6)
+    sprite.position.set(-halfW - 0.95, (tick / max) * WORLD.height, -halfD - 0.6)
     group.add(sprite)
   }
 

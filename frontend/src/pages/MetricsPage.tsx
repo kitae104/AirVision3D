@@ -246,7 +246,7 @@ function AccuracyReport() {
         <LazyScatter3DChart
           series={scatterSeries}
           axisMax={axisMax}
-          height={400}
+          height={460}
           xLabel="실측"
           yLabel="예측"
           zLabel="시간"

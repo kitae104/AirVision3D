@@ -71,7 +71,11 @@ export function prefersReducedMotion(): boolean {
 const AZIMUTH_LIMIT = THREE.MathUtils.degToRad(35)
 const POLAR_MIN = THREE.MathUtils.degToRad(55)
 const POLAR_MAX = THREE.MathUtils.degToRad(80)
-const CAMERA_RADIUS = 14.5
+
+/** 가장자리가 딱 붙지 않도록 두는 여유 (1이면 화면에 꽉 참) */
+const FIT_MARGIN = 1.06
+/** 맞춤 계산 반복 횟수 — 거리와 중심을 번갈아 고치므로 두세 번이면 수렴한다 */
+const FIT_PASSES = 3
 
 /**
  * three 렌더러·씬·카메라의 생명주기를 한곳에서 맡는다.
@@ -112,22 +116,73 @@ export function useChart3DScene({
     renderer.setClearAlpha(0)
 
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
-    const target = new THREE.Vector3(0, WORLD.height * 0.35, 0)
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200)
+    const target = new THREE.Vector3(0, WORLD.height * 0.45, 0)
 
     // 초기 시점 — 살짝 왼쪽 위에서 내려다본다
     let azimuth = THREE.MathUtils.degToRad(-20)
     let polar = THREE.MathUtils.degToRad(68)
+    let radius = 14.5
 
     function placeCamera() {
       camera.position.set(
-        target.x + CAMERA_RADIUS * Math.sin(polar) * Math.sin(azimuth),
-        target.y + CAMERA_RADIUS * Math.cos(polar),
-        target.z + CAMERA_RADIUS * Math.sin(polar) * Math.cos(azimuth),
+        target.x + radius * Math.sin(polar) * Math.sin(azimuth),
+        target.y + radius * Math.cos(polar),
+        target.z + radius * Math.sin(polar) * Math.cos(azimuth),
       )
       camera.lookAt(target)
+      camera.updateMatrixWorld()
     }
     placeCamera()
+
+    const fitBox = new THREE.Box3()
+    const corner = new THREE.Vector3()
+    const right = new THREE.Vector3()
+    const up = new THREE.Vector3()
+
+    /**
+     * 씬을 실제로 화면에 투영해 보고 카드 안에 꽉 차도록 거리와 중심을 맞춘다.
+     *
+     * 각도에 따라 투영된 모양이 달라지므로 공식 하나로는 맞출 수 없다.
+     * 경계 상자의 여덟 꼭짓점을 투영해 화면 좌표 범위를 재고,
+     * 그만큼 거리를 조정하고 중심을 옮기기를 몇 번 반복한다.
+     */
+    function fitCamera() {
+      fitBox.makeEmpty()
+      fitBox.expandByObject(scene)
+      if (fitBox.isEmpty()) return
+
+      for (let pass = 0; pass < FIT_PASSES; pass += 1) {
+        let minX = Infinity
+        let maxX = -Infinity
+        let minY = Infinity
+        let maxY = -Infinity
+        for (let i = 0; i < 8; i += 1) {
+          corner.set(
+            i & 1 ? fitBox.max.x : fitBox.min.x,
+            i & 2 ? fitBox.max.y : fitBox.min.y,
+            i & 4 ? fitBox.max.z : fitBox.min.z,
+          )
+          corner.project(camera)
+          minX = Math.min(minX, corner.x)
+          maxX = Math.max(maxX, corner.x)
+          minY = Math.min(minY, corner.y)
+          maxY = Math.max(maxY, corner.y)
+        }
+
+        // 화면 중앙에서 벗어난 만큼 시선 중심을 옮긴다
+        const visibleHeight = 2 * radius * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)
+        const visibleWidth = visibleHeight * camera.aspect
+        camera.matrixWorld.extractBasis(right, up, new THREE.Vector3())
+        target.addScaledVector(right, (((minX + maxX) / 2) * visibleWidth) / 2)
+        target.addScaledVector(up, (((minY + maxY) / 2) * visibleHeight) / 2)
+
+        // 긴 쪽이 화면을 꽉 채우도록 거리를 조정한다
+        const span = Math.max((maxX - minX) / 2, (maxY - minY) / 2)
+        if (span > 0) radius = THREE.MathUtils.clamp(radius * span * FIT_MARGIN, 1, 150)
+        placeCamera()
+      }
+    }
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.6))
     const key = new THREE.DirectionalLight(0xffffff, 2.1)
@@ -167,6 +222,8 @@ export function useChart3DScene({
       // 툴팁 위치 계산에 쓰라고 캔버스 픽셀 크기를 실어 보낸다
       camera.userData.canvasSize = { w: clientWidth, h: clientHeight }
       camera.updateProjectionMatrix()
+      fitCamera()
+      placeCamera()
       invalidate()
     }
     const resizeObserver = new ResizeObserver(() => resize())
@@ -193,7 +250,12 @@ export function useChart3DScene({
       dragging = true
       lastX = e.clientX
       lastY = e.clientY
-      canvas.setPointerCapture(e.pointerId)
+      // 포인터가 이미 사라졌으면 브라우저가 던진다. 캡처는 편의 기능이라 실패해도 회전은 계속한다.
+      try {
+        canvas.setPointerCapture(e.pointerId)
+      } catch {
+        /* 무시 */
+      }
       canvas.style.cursor = 'grabbing'
     }
 
@@ -208,6 +270,8 @@ export function useChart3DScene({
         polar = THREE.MathUtils.clamp(polar - (e.clientY - lastY) * 0.004, POLAR_MIN, POLAR_MAX)
         lastX = e.clientX
         lastY = e.clientY
+        // 각도가 바뀌면 화면에 비치는 크기도 달라지므로 거리를 다시 맞춘다
+        fitCamera()
         placeCamera()
         setTooltip(null)
         invalidate()
@@ -225,7 +289,11 @@ export function useChart3DScene({
     const endDrag = (e: PointerEvent) => {
       if (!dragging) return
       dragging = false
-      canvas.releasePointerCapture(e.pointerId)
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        /* 무시 */
+      }
       canvas.style.cursor = 'grab'
     }
 

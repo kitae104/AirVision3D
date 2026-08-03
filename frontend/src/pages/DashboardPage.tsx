@@ -377,7 +377,7 @@ export default function DashboardPage() {
               data={hourly}
               xKey="time"
               series={[{ key: 'avgPm25', name: '평균 PM2.5' }]}
-              height={280}
+              height={380}
               unit="㎍/㎥"
               fallback={
                 <ResponsiveContainer width="100%" height={260}>
@@ -458,7 +458,7 @@ export default function DashboardPage() {
                 { key: 'actualPm25', name: '관측값', color: obsColor },
                 { key: 'predictedPm25', name: 'AI 예측값', color: aiColor },
               ]}
-              height={300}
+              height={400}
               unit="㎍/㎥"
               fallback={
                 <ResponsiveContainer width="100%" height={260}>

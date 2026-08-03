@@ -79,8 +79,14 @@ export default function Scatter3DChart({
           depthWrite: false,
         }),
       )
-      plane.rotation.y = Math.PI / 2
-      plane.rotation.z = Math.atan2(WORLD.height, WORLD.width)
+      // 평면의 가로축을 (실측=예측) 대각선 방향에, 세로축을 시간축에 맞춘다.
+      // 오일러 각으로는 두 축을 동시에 맞추기 어려워 기저를 직접 세운다.
+      const diagonal = new THREE.Vector3(WORLD.width, WORLD.height, 0).normalize()
+      const timeAxis = new THREE.Vector3(0, 0, 1)
+      const normal = new THREE.Vector3().crossVectors(diagonal, timeAxis).normalize()
+      plane.quaternion.setFromRotationMatrix(
+        new THREE.Matrix4().makeBasis(diagonal, timeAxis, normal),
+      )
       plane.position.set(0, WORLD.height / 2, 0)
       group.add(plane)
 
@@ -111,7 +117,7 @@ export default function Scatter3DChart({
 
       for (const tick of ticks) {
         const ySprite = makeTextSprite(String(Math.round(tick)), palette.label)
-        ySprite.position.set(-half - 0.45, toY(tick), -halfD)
+        ySprite.position.set(-half - 0.95, toY(tick), -halfD)
         group.add(ySprite)
 
         const xSprite = makeTextSprite(String(Math.round(tick)), palette.label)
@@ -124,7 +130,7 @@ export default function Scatter3DChart({
       xName.position.set(0, -0.72, halfD + 0.35)
       group.add(xName)
       const yName = makeTextSprite(yLabel, palette.label)
-      yName.position.set(-half - 0.45, WORLD.height + 0.4, -halfD)
+      yName.position.set(-half - 0.95, WORLD.height + 0.4, -halfD)
       group.add(yName)
       const zName = makeTextSprite(`${zLabel} →`, palette.label)
       zName.position.set(half + 0.7, -0.28, 0)
