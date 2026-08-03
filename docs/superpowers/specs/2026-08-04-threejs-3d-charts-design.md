@@ -85,10 +85,16 @@ interface Bar3DChartProps {
 interface Scatter3DPoint {
   x: number            // 실측
   y: number            // 예측
+  z: number            // 0~1 정규화된 시간 위치 (0 = 가장 오래됨, 1 = 최신)
   label?: string
 }
+interface Scatter3DSeries {
+  name: string         // 모델명
+  color: string
+  points: Scatter3DPoint[]
+}
 interface Scatter3DChartProps {
-  points: Scatter3DPoint[]   // 배열 순서가 곧 Z축(시간) 순서, 마지막이 최신
+  series: Scatter3DSeries[]
   axisMax: number
   height?: number
   xLabel: string
@@ -119,7 +125,10 @@ interface Scatter3DChartProps {
 |---|---|
 | 시간별 평균 PM2.5 | 막대마다 그 값의 등급색 (`config/grades.ts`의 `GRADES[].chart`) |
 | 관측값 vs AI 예측 | 관측 = 인디고(observation), 예측 = 바이올렛(prediction) |
-| 산점도 | 점 = 실측값의 등급색, y=x 기준면 = 축 회색 반투명 |
+| 산점도 | 점 = 모델별 색(기존 `MODEL_COLORS` 유지), y=x 기준면 = 축 회색 반투명 |
+
+산점도는 모델이 여러 개일 수 있고 기존 2D 차트도 모델별로 색을 나눠 범례를 만든다.
+점 색을 등급색으로 바꾸면 그 구분이 사라지므로 모델색을 유지한다.
 
 바닥 그리드·축선·눈금 텍스트는 `chartTheme`의 `grid` / `axis` 값을 그대로 쓴다.
 
@@ -127,7 +136,9 @@ interface Scatter3DChartProps {
 
 - **진입**: 막대 높이 0 → 실값. 인덱스당 20ms stagger, easeOutCubic, 전체 약 800ms.
   산점도는 점 스케일 0 → 1을 같은 방식으로 적용한다.
-- **데이터 변경**: 재시작이 아니라 현재 높이에서 새 값으로 400ms 보간한다.
+- **데이터 변경**: 씬을 다시 만들고 진입 애니메이션을 다시 재생한다.
+  이 화면들의 데이터는 사용자가 지역을 바꿀 때만 갱신되므로 재생이 오히려 자연스럽고,
+  별도 보간 경로를 만들면 코드만 늘어난다.
 - **정지 렌더**: 진입 애니메이션이 끝나면 rAF 루프를 멈춘다.
   드래그, 호버, 데이터 변경, 리사이즈, 테마 전환 때만 다시 그린다.
   유휴 상태의 GPU 사용은 0이다.
