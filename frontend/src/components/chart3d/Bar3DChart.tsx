@@ -16,7 +16,12 @@ export interface Bar3DSeries {
 }
 
 export interface Bar3DChartProps {
-  data: Array<Record<string, unknown>>
+  /**
+   * 행 배열. `Record<string, unknown>`이 아니라 `object`로 받는 이유는
+   * 인터페이스로 선언된 타입(HourlyPoint 등)에는 인덱스 시그니처가 없어
+   * Record에 대입되지 않기 때문이다. 필드 접근은 안에서 좁혀 쓴다.
+   */
+  data: readonly object[]
   /** x축 라벨로 쓸 필드명 */
   xKey: string
   /** 1~2개 */
@@ -36,8 +41,12 @@ function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3
 }
 
-function numberAt(row: Record<string, unknown> | undefined, key: string): number {
-  const value = row?.[key]
+function fieldAt(row: object | undefined, key: string): unknown {
+  return row ? (row as Record<string, unknown>)[key] : undefined
+}
+
+function numberAt(row: object | undefined, key: string): number {
+  const value = fieldAt(row, key)
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
@@ -59,7 +68,7 @@ export default function Bar3DChart({
     (ctx: Chart3DContext): Chart3DBuild => {
       const values = series.flatMap((s) => data.map((row) => numberAt(row, s.key)))
       const max = axisMaxFor(values)
-      const xLabels = data.map((row) => String(row[xKey] ?? ''))
+      const xLabels = data.map((row) => String(fieldAt(row, xKey) ?? ''))
       const depth = Math.max(WORLD.seriesDepth * series.length, 1.2)
 
       const axes = buildAxes({ max, depth, xLabels, palette })
@@ -165,7 +174,7 @@ export default function Bar3DChart({
           const tooltip: Chart3DTooltip = {
             x: ((projected.x + 1) / 2) * (size?.w ?? 1),
             y: ((1 - projected.y) / 2) * (size?.h ?? 1),
-            title: String(data[index]?.[xKey] ?? ''),
+            title: String(fieldAt(data[index], xKey) ?? ''),
             rows: layers.map((layer) => {
               const value = numberAt(data[index], layer.series.key)
               return {
