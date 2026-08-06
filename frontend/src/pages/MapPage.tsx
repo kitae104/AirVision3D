@@ -3,8 +3,13 @@ import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { WindLayer } from 'cesium-wind-layer'
 import type { WindData } from 'cesium-wind-layer'
 import { useEffect, useRef, useState } from 'react'
+import { Clock, Info, Layers, MapPinned, Ruler } from 'lucide-react'
 import { apiClient, errorMessage } from '../api/client'
 import Hls from 'hls.js'
+import {
+  MapLegend, MapPanel, PanelField, PanelGroup, PanelSection,
+} from '../components/map/panel'
+import { Button, Toggle, selectClass } from '../components/ui'
 import type {
   AdvectionResponse, AirAlert, ApiResponse, CctvCamera, CctvEstimate, CctvStreamsResponse,
   CurrentAirQuality, IdwGridResponse,
@@ -77,6 +82,27 @@ const LAYER_LABELS: Record<LayerKey, string> = {
   advection: 'PM2.5 이동 예측',
   cctv: '실시간 CCTV(인천 3구)',
 }
+
+/**
+ * 레이어를 출처별로 묶는다.
+ * 10개를 한 줄로 늘어놓으면 무엇이 우리 데이터고 무엇이 공공 데이터인지 구분되지 않는다.
+ */
+const LAYER_GROUPS: { label: string; keys: LayerKey[] }[] = [
+  { label: '자체 데이터', keys: ['observation', 'prediction', 'interpolation', 'idwSurface'] },
+  { label: '공공 데이터', keys: ['airkorea', 'odor', 'alertRegion', 'cctv'] },
+  { label: '예측 시뮬레이션', keys: ['wind', 'advection'] },
+]
+
+/** 측정 도구 (보고서 §4.3.3: 거리·면적·고도) */
+const MEASURE_TOOLS = [
+  { key: 'distance', label: '거리', title: '좌클릭으로 지점을 추가하고 우클릭으로 끝냅니다.' },
+  {
+    key: 'area',
+    label: '면적',
+    title: '좌클릭으로 꼭짓점을 3개 이상 찍고 우클릭으로 끝냅니다.',
+  },
+  { key: 'height', label: '고도', title: '지점을 한 번 클릭하면 지형·객체 높이를 표시합니다.' },
+] as const
 
 /** 시계열 샘플 1건이 유효한 시간 길이 (시간 단위 관측 가정) */
 const SAMPLE_DURATION_SEC = 3600
@@ -756,35 +782,35 @@ function CctvPlayerModal({ camera, mock, sites, onEstimated, onClose }: {
     }
   }
 
-  const buttonClass =
-    'rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100'
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className={`w-full rounded-lg bg-white p-4 shadow-xl ${large ? 'max-w-6xl' : 'max-w-2xl'}`}
+        className={`w-full rounded-card border border-line bg-surface p-4 shadow-panel ${large ? 'max-w-6xl' : 'max-w-2xl'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="truncate text-base font-bold text-gray-900">📹 {camera.name}</h3>
-            <p className="text-xs text-gray-500">
+            <h3 className="truncate text-base font-semibold text-ink">📹 {camera.name}</h3>
+            <p className="text-xs text-ink-faint">
               {camera.district} · ITS 국가교통정보센터 실시간 도로 CCTV
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button className={buttonClass} onClick={() => setLarge(!large)}>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button size="sm" onClick={() => setLarge(!large)}>
               {large ? '창 축소' : '창 확대'}
-            </button>
-            <button
-              className={buttonClass}
+            </Button>
+            <Button
+              size="sm"
               onClick={() => videoRef.current?.requestFullscreen().catch(() => {})}
             >
               전체화면
-            </button>
-            <button className={buttonClass} onClick={onClose}>닫기</button>
+            </Button>
+            <Button size="sm" onClick={onClose}>
+              닫기
+            </Button>
           </div>
         </div>
         {camera.streamUrl && !streamError ? (
@@ -794,37 +820,33 @@ function CctvPlayerModal({ camera, mock, sites, onEstimated, onClose }: {
             muted
             autoPlay
             playsInline
-            className="aspect-video w-full rounded bg-black"
+            className="aspect-video w-full rounded-control bg-black"
           />
         ) : (
-          <div className="flex aspect-video w-full items-center justify-center rounded bg-gray-900 px-6 text-center text-sm text-gray-300">
+          <div className="flex aspect-video w-full items-center justify-center rounded-control bg-gray-900 px-6 text-center text-sm text-gray-300">
             {streamError ?? (mock
               ? 'Mock 모드입니다. 실제 CCTV 영상은 .env에 ITS_CCTV_KEY 설정 후 표시됩니다.'
               : '이 카메라의 스트림 주소가 제공되지 않았습니다.')}
           </div>
         )}
         <div className="mt-3">
-          <button
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={runEstimate}
-            disabled={estimating}
-          >
+          <Button variant="primary" onClick={runEstimate} disabled={estimating}>
             {estimating
               ? '추정 중…'
               : canCapture ? '이 화면으로 미세먼지 추정' : '샘플 이미지로 추정 시연'}
-          </button>
+          </Button>
           {estimateError && (
-            <p className="mt-2 text-sm text-red-600">{estimateError}</p>
+            <p className="mt-2 text-sm text-red-600 dark:text-red-400">{estimateError}</p>
           )}
           {estimate && (
-            <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-800">
+            <div className="mt-3 rounded-control border border-line bg-surface-muted p-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink">
                 {estimate.pm25 != null ? (
                   <>
-                    <span className={`rounded px-2 py-0.5 text-xs font-bold ${gradeOf(estimate.pm25).badge}`}>
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${gradeOf(estimate.pm25).badge}`}>
                       {estimate.grade ?? gradeOf(estimate.pm25).name}
                     </span>
-                    <span className="font-bold">PM2.5 {estimate.pm25.toFixed(1)} ㎍/㎥</span>
+                    <span className="num font-semibold">PM2.5 {estimate.pm25.toFixed(1)} ㎍/㎥</span>
                   </>
                 ) : (
                   <span>PM2.5 추정값 없음</span>
@@ -834,7 +856,7 @@ function CctvPlayerModal({ camera, mock, sites, onEstimated, onClose }: {
                   <span>가시거리 약 {estimate.visibilityKm.toFixed(1)} km</span>
                 )}
               </div>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1.5 text-xs text-ink-faint">
                 {estimate.mode === 'STATION_FALLBACK'
                   ? `야간(태양고도 ${estimate.solarElevationDeg.toFixed(1)}°) — 최근접 실측 대체`
                     + (estimate.stationName ? ` (${estimate.stationName} 측정소)` : '')
@@ -1910,328 +1932,331 @@ export default function MapPage() {
     })
   }
 
+  const activeLayerCount = Object.values(layers).filter(Boolean).length
+  const windHourIndex = windField ? Math.min(hourOffset, windField.hours.length - 1) : 0
+
   return (
-    <div className="flex h-[calc(100vh-3rem)] flex-col space-y-3">
-      <div className="flex flex-wrap items-center gap-4">
-        <h2 className="text-xl font-bold text-gray-900">3D 지도</h2>
-
-        {(Object.keys(LAYER_LABELS) as LayerKey[]).map((key) => (
-          <label key={key} className="flex items-center gap-1.5 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={layers[key]}
-              onChange={(e) => setLayers({ ...layers, [key]: e.target.checked })}
-            />
-            <span aria-hidden="true">{MAP_CONFIG.markerEmojis[key]}</span>
-            {LAYER_LABELS[key]}
-          </label>
-        ))}
-
-        <select
-          value={selectedSiteId}
-          onChange={(e) => {
-            setSelectedSiteId(e.target.value)
-            const site = sites.find((s) => s.id === Number(e.target.value))
-            if (site) flyToSite(site)
-          }}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-        >
-          <option value="" disabled>
-            관측소로 이동...
-          </option>
-          {sites.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-
-        <label className="flex items-center gap-1.5 text-sm text-gray-700">
-          <span className="text-gray-500">시도</span>
-          <select
-            value={selectedSido}
-            onChange={(e) => changeSido(e.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-          >
-            {!selectedSido && <option value="" disabled>불러오는 중...</option>}
-            {SIDO_CENTERS.map((s) => (
-              <option key={s.name} value={s.name}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {(!selectedSido || selectedSido === '인천') && (
-          <span className="flex items-center gap-1.5 text-sm text-gray-700">
-            <span className="text-gray-500">핵심 대상지</span>
-            {INCHEON_CORE_DISTRICTS.map((d) => (
-              <button
-                key={d.name}
-                type="button"
-                onClick={() => flyToDistrict(d)}
-                className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100"
-              >
-                {d.name}
-              </button>
-            ))}
-          </span>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setDualMode(!dualMode)}
-          className={`rounded-md border px-2 py-1 text-xs ${
-            dualMode
-              ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
-              : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-          }`}
-          title="관측(좌)과 AI 예측·보간(우)을 나란히 비교"
-        >
-          듀얼맵
-        </button>
-
-        <span className="flex items-center gap-1 text-sm text-gray-700">
-          <span className="text-gray-500">측정</span>
-          {([
-            { key: 'distance', label: '거리', title: '좌클릭으로 지점 추가, 우클릭으로 종료' },
-            { key: 'area', label: '면적', title: '좌클릭으로 꼭짓점 추가(3점 이상), 우클릭으로 종료' },
-            { key: 'height', label: '고도', title: '지점을 1회 클릭하면 지형·객체 높이 표시' },
-          ] as const).map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setMeasureTool(measureTool === t.key ? null : t.key)}
-              className={`rounded-md border px-2 py-1 text-xs ${
-                measureTool === t.key
-                  ? 'border-yellow-500 bg-yellow-500 text-white hover:bg-yellow-600'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-              }`}
-              title={t.title}
-            >
-              {measureTool === t.key ? `${t.label} 측정 중` : t.label}
-            </button>
-          ))}
-        </span>
-        <button
-          type="button"
-          onClick={() => measureDsRef.current?.entities.removeAll()}
-          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
-          title="측정 결과 지우기"
-        >
-          측정 지우기
-        </button>
-        <button
-          type="button"
-          onClick={captureScreen}
-          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
-          title="현재 지도 화면을 PNG로 저장"
-        >
-          화면 캡처
-        </button>
-        {(import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined) && (
-          <button
-            type="button"
-            onClick={() => switchBaseMap(baseMap === 'osm' ? 'satellite' : 'osm')}
-            className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
-            title="배경지도 전환 (위성 ↔ 일반)"
-          >
-            {baseMap === 'osm' ? '위성 지도' : '일반 지도'}
-          </button>
-        )}
-
-        <label className="flex items-center gap-1.5 text-sm text-gray-700">
-          <span className="text-gray-500">격자</span>
-          <select
-            value={gridPreset}
-            onChange={(e) => setGridPreset(e.target.value as GridPresetKey)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            title="관측소당 입체격자 세밀도 (상세 7×7×3 = 최종보고서 규격)"
-          >
-            {Object.entries(MAP_CONFIG.gridPresets).map(([key, p]) => (
-              <option key={key} value={key}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {layers.airkorea && (
-          <label className="flex items-center gap-1.5 text-sm text-gray-700">
-            <span className="text-gray-500">공공 기준항목</span>
-            <select
-              value={pollutant}
-              onChange={(e) => setPollutant(e.target.value as PublicPollutantKey)}
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              {PUBLIC_POLLUTANTS.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <div className="ml-auto flex items-center gap-2 text-xs text-gray-600">
-          {GRADES.map((g) => (
-            <span key={g.name} className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: g.chart }} />
-              {g.name}
-              {g.upper != null && ` ≤${g.upper}`}
-            </span>
-          ))}
-          <span className="flex items-center gap-1">
-            <span
-              className="inline-block h-3 w-3 rounded-sm"
-              style={{ backgroundColor: PUBLIC_GRADE_COLORS['데이터 없음'] }}
-            />
-            데이터 없음 △
-          </span>
-        </div>
-      </div>
-
-      {/* 공공 데이터 상태 표시 (Mock/stale/마지막 수집시각) */}
-      {publicAir && (
-        <p className="rounded-md bg-sky-50 px-4 py-1.5 text-xs text-sky-800">
-          공공 실측 ({publicAir.sido} · 출처: 환경부·한국환경공단 AirKorea) · 측정소{' '}
-          {publicAir.stations.length}곳
-          {publicAir.collectedAt &&
-            ` · 수집 ${new Date(publicAir.collectedAt).toLocaleString('ko-KR')}`}
-          {weather && (
-            <span className="ml-2 text-cyan-800">
-              | 기상(기상청): {weather.temperature != null && `${weather.temperature}℃`}
-              {weather.humidity != null && ` · 습도 ${weather.humidity}%`}
-              {weather.windSpeed != null &&
-                ` · ${weather.windDirectionText ?? ''} ${weather.windSpeed}m/s`}
-              {weather.precipitationType && weather.precipitationType !== '없음' &&
-                ` · 강수: ${weather.precipitationType}`}
-            </span>
-          )}
-          {publicAir.mock && (
-            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">
-              Mock 데이터 (서비스키 미설정)
-            </span>
-          )}
-          {publicAir.stale && (
-            <span className="ml-2 rounded bg-orange-100 px-1.5 py-0.5 font-medium text-orange-800">
-              {publicAir.message ?? '오래된 데이터 표시 중'}
-            </span>
-          )}
-        </p>
-      )}
-      {publicError && (
-        <p className="rounded-md bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
-          공공 대기질 데이터를 불러오지 못했습니다: {publicError} (자체 관측 레이어는 정상 표시)
-        </p>
-      )}
-
-      {/* 바람·이동 예측 시간 컨트롤 */}
-      {windField && (layers.wind || layers.advection) && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm">
-          <span className="font-medium text-gray-700">바람·이동 예측</span>
-          <input
-            type="range"
-            min={0}
-            max={windField.hours.length - 1}
-            value={Math.min(hourOffset, windField.hours.length - 1)}
-            onChange={(e) => setHourOffset(Number(e.target.value))}
-            className="w-40"
-          />
-          <span className="text-gray-700">
-            +{Math.min(hourOffset, windField.hours.length - 1) + 1}시간 (
-            {new Date(windField.hours[
-              Math.min(hourOffset, windField.hours.length - 1)].time)
-              .toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 예보)
-          </span>
-          {layers.advection && advection && (
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700"
-              title="바람에 의한 이동만 반영한 추정입니다. 확산·배출·침적은 포함하지 않습니다.">
-              단순 이류 추정
-            </span>
-          )}
-          {windField.mock && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-              Mock 바람 데이터 (균일 바람장)
-            </span>
-          )}
-          <span className="text-xs text-gray-400">
-            기상청 초단기예보 기반 · 중부권(서해~동해) 격자 {windField.width}×{windField.height}
-          </span>
-        </div>
-      )}
-
-      {/* 시계열 컨트롤 */}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm">
-        <span className="font-medium text-gray-700">시계열 재생</span>
-        <input
-          type="datetime-local"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1"
-        />
-        <span className="text-gray-400">~</span>
-        <input
-          type="datetime-local"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1"
-        />
-        <button
-          onClick={loadSeries}
-          disabled={loading || !from || !to}
-          className="rounded-md bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          시계열 로드
-        </button>
-        {mode === 'series' && (
-          <button
-            onClick={loadCurrent}
-            disabled={loading}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-gray-600 hover:bg-gray-100"
-          >
-            현재값 보기
-          </button>
-        )}
-        <span className="text-xs text-gray-400">
-          {mode === 'series'
-            ? '자체 관측 + 공공 실측 함께 재생 · 좌측 하단 위젯으로 재생·배속, 하단 Timeline으로 이동'
-            : '기간 선택 후 [시계열 로드] → 자체 관측·공공 실측(선택 시도) 시간 재생 모드로 전환'}
-        </span>
-      </div>
-
-      {error && <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
-      {loading && <p className="text-sm text-gray-500">지도 데이터 불러오는 중...</p>}
-
-      <div className="flex min-h-0 flex-1 gap-2">
+    <div className="relative h-[calc(100vh-5.5rem)] min-h-[560px] w-full overflow-hidden rounded-card border border-line bg-surface">
+      {/* 지도 — 화면을 가득 채우고 컨트롤은 그 위에 띄운다 */}
+      <div className="flex h-full w-full">
         <div className="relative min-w-0 flex-1">
-          {dualMode && (
-            <span className="absolute left-2 top-2 z-10 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
-              관측·공공 (기준)
-            </span>
-          )}
-          <div ref={containerRef} className="h-full w-full overflow-hidden rounded-lg border border-gray-200" />
+          {dualMode && <PaneLabel>관측·공공 (기준)</PaneLabel>}
+          <div ref={containerRef} className="h-full w-full" />
         </div>
         {dualMode && (
-          <div className="relative min-w-0 flex-1">
-            <span className="absolute left-2 top-2 z-10 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
-              AI 예측·보간 ({mode === 'series' ? '이력 재생' : '최신값'} · 좌측 카메라·시간 추종)
-            </span>
-            <div ref={compareContainerRef} className="h-full w-full overflow-hidden rounded-lg border border-gray-200" />
+          <div className="relative min-w-0 flex-1 border-l border-line">
+            <PaneLabel>
+              AI 예측·보간 ({mode === 'series' ? '이력 재생' : '최신값'} · 좌측 화면 따라감)
+            </PaneLabel>
+            <div ref={compareContainerRef} className="h-full w-full" />
           </div>
         )}
       </div>
 
-      <p className="text-xs text-gray-400">
-        박스를 클릭하면 상세정보가 표시됩니다 · 격자: 관측소당{' '}
-        {gridCfg.countX}x{gridCfg.countY}x{gridCfg.countZ}
-        {gridPreset === 'detailed' && ' (최종보고서 규격)'} · ion 토큰
-        없이 OSM 지도로 동작 (.env의 VITE_CESIUM_ION_TOKEN으로 위성영상 사용 가능)
-      </p>
-      <p className="text-xs text-gray-400">
-        공공 측정소의 막대 높이는 오염 농도를 비교하기 위한 시각적 표현입니다. 실제 오염층의
-        물리적 높이를 의미하지 않습니다.
-      </p>
+      <MapPanel>
+        <PanelSection
+          title="지역"
+          icon={MapPinned}
+          summary={selectedSido || undefined}
+          defaultOpen
+        >
+          <PanelField label="시도">
+            <select
+              value={selectedSido}
+              onChange={(e) => changeSido(e.target.value)}
+              className={`${selectClass} w-full py-1.5`}
+            >
+              {!selectedSido && (
+                <option value="" disabled>
+                  불러오는 중...
+                </option>
+              )}
+              {SIDO_CENTERS.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </PanelField>
+
+          {(!selectedSido || selectedSido === '인천') && (
+            <PanelField label="핵심 대상지로 이동">
+              <div className="flex gap-1.5">
+                {INCHEON_CORE_DISTRICTS.map((d) => (
+                  <Button
+                    key={d.name}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => flyToDistrict(d)}
+                  >
+                    {d.name}
+                  </Button>
+                ))}
+              </div>
+            </PanelField>
+          )}
+
+          <PanelField label="관측소로 이동">
+            <select
+              value={selectedSiteId}
+              onChange={(e) => {
+                setSelectedSiteId(e.target.value)
+                const site = sites.find((s) => s.id === Number(e.target.value))
+                if (site) flyToSite(site)
+              }}
+              className={`${selectClass} w-full py-1.5`}
+            >
+              <option value="" disabled>
+                관측소 선택...
+              </option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </PanelField>
+        </PanelSection>
+
+        <PanelSection
+          title="레이어"
+          icon={Layers}
+          summary={`${activeLayerCount}개 켜짐`}
+          defaultOpen
+        >
+          {LAYER_GROUPS.map((group) => (
+            <PanelGroup key={group.label} label={group.label}>
+              {group.keys.map((key) => (
+                <Toggle
+                  key={key}
+                  checked={layers[key]}
+                  onChange={(next) => setLayers({ ...layers, [key]: next })}
+                  label={`${MAP_CONFIG.markerEmojis[key]} ${LAYER_LABELS[key]}`}
+                />
+              ))}
+            </PanelGroup>
+          ))}
+
+          {layers.airkorea && (
+            <PanelField label="공공 기준항목">
+              <select
+                value={pollutant}
+                onChange={(e) => setPollutant(e.target.value as PublicPollutantKey)}
+                className={`${selectClass} w-full py-1.5`}
+              >
+                {PUBLIC_POLLUTANTS.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </PanelField>
+          )}
+
+          <PanelField label="입체격자 세밀도">
+            <select
+              value={gridPreset}
+              onChange={(e) => setGridPreset(e.target.value as GridPresetKey)}
+              className={`${selectClass} w-full py-1.5`}
+            >
+              {Object.entries(MAP_CONFIG.gridPresets).map(([key, p]) => (
+                <option key={key} value={key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </PanelField>
+        </PanelSection>
+
+        <PanelSection
+          title="시간"
+          icon={Clock}
+          summary={mode === 'series' ? '재생 중' : '현재값'}
+        >
+          <PanelField label="시작">
+            <input
+              type="datetime-local"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className={`${selectClass} w-full py-1.5`}
+            />
+          </PanelField>
+          <PanelField label="종료">
+            <input
+              type="datetime-local"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className={`${selectClass} w-full py-1.5`}
+            />
+          </PanelField>
+          <div className="flex gap-1.5 px-2">
+            <Button
+              variant="primary"
+              size="sm"
+              className="flex-1"
+              onClick={loadSeries}
+              disabled={loading || !from || !to}
+            >
+              시계열 재생
+            </Button>
+            {mode === 'series' && (
+              <Button size="sm" className="flex-1" onClick={loadCurrent} disabled={loading}>
+                현재값 보기
+              </Button>
+            )}
+          </div>
+          <p className="px-2 text-[0.6875rem] leading-relaxed text-ink-faint">
+            {mode === 'series'
+              ? '자체 관측과 공공 실측을 함께 재생합니다. 좌측 하단 위젯으로 재생·배속을, 하단 타임라인으로 시각을 조절하세요.'
+              : '기간을 고르고 [시계열 재생]을 누르면 해당 기간을 시간 순서대로 재생합니다.'}
+          </p>
+
+          {windField && (layers.wind || layers.advection) && (
+            <div className="mt-1 rounded-control bg-surface-muted p-2.5">
+              <p className="mb-1.5 text-[0.6875rem] font-semibold text-ink-muted">
+                바람·이동 예측 시각
+              </p>
+              <input
+                type="range"
+                min={0}
+                max={windField.hours.length - 1}
+                value={windHourIndex}
+                onChange={(e) => setHourOffset(Number(e.target.value))}
+                className="w-full accent-[var(--av-brand)]"
+              />
+              <p className="num mt-1 text-xs text-ink">
+                +{windHourIndex + 1}시간 ·{' '}
+                {new Date(windField.hours[windHourIndex].time).toLocaleTimeString('ko-KR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}{' '}
+                예보
+              </p>
+              <p className="mt-1 text-[0.6875rem] leading-relaxed text-ink-faint">
+                기상청 초단기예보 기반 · 중부권 격자 {windField.width}×{windField.height}
+                {layers.advection && advection && ' · 바람에 의한 이동만 반영한 단순 추정'}
+                {windField.mock && ' · Mock 바람 데이터(균일 바람장)'}
+              </p>
+            </div>
+          )}
+        </PanelSection>
+
+        <PanelSection
+          title="도구"
+          icon={Ruler}
+          summary={measureTool ? '측정 중' : undefined}
+        >
+          <PanelField label="측정">
+            <div className="flex gap-1.5">
+              {MEASURE_TOOLS.map((t) => (
+                <Button
+                  key={t.key}
+                  size="sm"
+                  className="flex-1"
+                  variant={measureTool === t.key ? 'primary' : 'secondary'}
+                  onClick={() => setMeasureTool(measureTool === t.key ? null : t.key)}
+                  title={t.title}
+                >
+                  {t.label}
+                </Button>
+              ))}
+            </div>
+          </PanelField>
+          <div className="flex flex-wrap gap-1.5 px-2">
+            <Button size="sm" onClick={() => measureDsRef.current?.entities.removeAll()}>
+              측정 지우기
+            </Button>
+            <Button size="sm" onClick={captureScreen} title="현재 지도 화면을 PNG로 저장">
+              화면 캡처
+            </Button>
+            <Button
+              size="sm"
+              variant={dualMode ? 'primary' : 'secondary'}
+              onClick={() => setDualMode(!dualMode)}
+              title="관측(좌)과 AI 예측·보간(우)을 나란히 비교"
+            >
+              듀얼맵
+            </Button>
+            {(import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined) && (
+              <Button
+                size="sm"
+                onClick={() => switchBaseMap(baseMap === 'osm' ? 'satellite' : 'osm')}
+                title="배경지도 전환 (위성 ↔ 일반)"
+              >
+                {baseMap === 'osm' ? '위성 지도' : '일반 지도'}
+              </Button>
+            )}
+          </div>
+          {measureTool && (
+            <p className="px-2 text-[0.6875rem] leading-relaxed text-ink-faint">
+              {MEASURE_TOOLS.find((t) => t.key === measureTool)?.title}
+            </p>
+          )}
+        </PanelSection>
+
+        <PanelSection title="데이터 상태" icon={Info}>
+          {publicAir ? (
+            <p className="px-2 text-[0.6875rem] leading-relaxed text-ink-muted">
+              공공 실측 {publicAir.sido} · 측정소 {publicAir.stations.length}곳
+              {publicAir.collectedAt &&
+                ` · 수집 ${new Date(publicAir.collectedAt).toLocaleString('ko-KR')}`}
+              <br />
+              출처: 환경부·한국환경공단 AirKorea
+              {weather && (
+                <>
+                  <br />
+                  기상(기상청): {weather.temperature != null && `${weather.temperature}℃`}
+                  {weather.humidity != null && ` · 습도 ${weather.humidity}%`}
+                  {weather.windSpeed != null &&
+                    ` · ${weather.windDirectionText ?? ''} ${weather.windSpeed}m/s`}
+                  {weather.precipitationType &&
+                    weather.precipitationType !== '없음' &&
+                    ` · 강수 ${weather.precipitationType}`}
+                </>
+              )}
+            </p>
+          ) : (
+            <p className="px-2 text-[0.6875rem] text-ink-faint">공공 데이터를 불러오지 않았습니다.</p>
+          )}
+          <p className="px-2 text-[0.6875rem] leading-relaxed text-ink-faint">
+            박스를 클릭하면 상세정보가 열립니다 · 격자 관측소당 {gridCfg.countX}×{gridCfg.countY}×
+            {gridCfg.countZ}
+            {gridPreset === 'detailed' && ' (최종보고서 규격)'}
+            <br />
+            공공 측정소 막대의 높이는 농도 비교용 시각 표현이며 실제 오염층 높이가 아닙니다.
+          </p>
+        </PanelSection>
+      </MapPanel>
+
+      <MapLegend
+        items={[
+          ...GRADES.map((g) => ({
+            name: g.name,
+            color: g.chart,
+            note: g.upper != null ? `≤${g.upper}` : undefined,
+          })),
+          { name: '데이터 없음', color: PUBLIC_GRADE_COLORS['데이터 없음'], note: '△' },
+        ]}
+      />
+
+      {/* 상태 알림 — 지도 위 중앙 상단 */}
+      <div className="pointer-events-none absolute left-1/2 top-3 z-30 flex w-[26rem] max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-2">
+        {error && <MapToast tone="error">{error}</MapToast>}
+        {publicError && (
+          <MapToast tone="warning">
+            공공 대기질을 불러오지 못했습니다: {publicError} (자체 관측 레이어는 정상 표시)
+          </MapToast>
+        )}
+        {publicAir?.mock && (
+          <MapToast tone="warning">
+            공공 데이터가 Mock 상태입니다. 서비스키를 설정하면 실 데이터로 바뀝니다.
+          </MapToast>
+        )}
+        {publicAir?.stale && (
+          <MapToast tone="warning">{publicAir.message ?? '오래된 데이터를 표시 중입니다.'}</MapToast>
+        )}
+        {loading && <MapToast tone="info">지도 데이터를 불러오는 중...</MapToast>}
+      </div>
 
       {cctvPlayback && (
         <CctvPlayerModal
@@ -2242,6 +2267,39 @@ export default function MapPage() {
           onClose={() => setCctvPlayback(null)}
         />
       )}
+    </div>
+  )
+}
+
+/** 듀얼맵에서 각 화면이 무엇을 보여 주는지 알려 주는 라벨 */
+function PaneLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="absolute left-1/2 top-3 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/65 px-3 py-1 text-xs text-white">
+      {children}
+    </span>
+  )
+}
+
+/** 지도 위 상태 알림 */
+function MapToast({
+  tone,
+  children,
+}: {
+  tone: 'error' | 'warning' | 'info'
+  children: React.ReactNode
+}) {
+  const styles = {
+    error:
+      'border-red-200 bg-red-50/95 text-red-800 dark:border-red-500/40 dark:bg-red-950/90 dark:text-red-200',
+    warning:
+      'border-amber-200 bg-amber-50/95 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/90 dark:text-amber-200',
+    info: 'border-line bg-overlay text-ink-muted',
+  }[tone]
+  return (
+    <div
+      className={`pointer-events-auto rounded-control border px-3.5 py-2 text-xs shadow-panel backdrop-blur ${styles}`}
+    >
+      {children}
     </div>
   )
 }

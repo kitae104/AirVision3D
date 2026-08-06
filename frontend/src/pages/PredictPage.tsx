@@ -1,11 +1,27 @@
 import { useEffect, useState } from 'react'
+import { Cpu, Sparkles, Target } from 'lucide-react'
 import { apiClient, errorMessage } from '../api/client'
 import type { ApiResponse, PageResponse, Prediction, Site } from '../api/client'
 import { gradeStyle } from '../config/grades'
-
-const inputCls =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none'
-const labelCls = 'mb-1 block text-sm font-medium text-gray-700'
+import {
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  GradeBadge,
+  Notice,
+  PageHero,
+  SectionHeading,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  TableWrap,
+  Tr,
+  inputClass,
+  labelClass,
+  useKindColor,
+} from '../components/ui'
 
 /** 관리자: AI 예측 실행 (이미지 + 환경값) */
 export default function PredictPage() {
@@ -14,13 +30,18 @@ export default function PredictPage() {
   const [image, setImage] = useState<File | null>(null)
   const [result, setResult] = useState<Prediction | null>(null)
   const [recent, setRecent] = useState<Prediction[]>([])
+  const [totalPredictions, setTotalPredictions] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const accent = useKindColor('prediction')
 
   const loadRecent = () =>
     apiClient
       .get<ApiResponse<PageResponse<Prediction>>>('/predictions?size=10')
-      .then((res) => setRecent(res.data.data.content))
+      .then((res) => {
+        setRecent(res.data.data.content)
+        setTotalPredictions(res.data.data.totalElements)
+      })
 
   useEffect(() => {
     apiClient.get<ApiResponse<Site[]>>('/sites').then((res) => setSites(res.data.data))
@@ -54,105 +75,204 @@ export default function PredictPage() {
   }
 
   const grade = result ? gradeStyle(result.predictedGrade) : null
+  // 히어로는 방금 실행한 결과가 있으면 그것을, 없으면 가장 최근 저장된 예측을 보여 준다
+  const headline = result ?? recent[0] ?? null
+  const headlineGrade = headline ? gradeStyle(headline.predictedGrade) : null
+  const matchedCount = recent.filter((p) => p.actualPm25 != null).length
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900">AI 예측 실행</h2>
+      <PageHero
+        accent={accent}
+        eyebrow={headline ? `AI 예측 · ${headline.siteName}` : 'AI 예측'}
+        value={headline ? headline.predictedPm25 : '—'}
+        unit={headline ? '㎍/㎥' : undefined}
+        valueColor={headlineGrade?.chart}
+        badge={headline && <GradeBadge grade={headline.predictedGrade} />}
+        description={
+          headline
+            ? `${result ? '방금 실행한' : '가장 최근'} 예측 결과입니다. 대기 이미지와 기온·습도·풍속으로 추정했습니다.`
+            : '아직 실행한 예측이 없습니다. 아래 양식으로 첫 예측을 실행해 보세요.'
+        }
+        facts={[
+          {
+            icon: <Sparkles size={15} />,
+            label: '누적 예측',
+            value: totalPredictions != null ? `${totalPredictions.toLocaleString()}건` : '—',
+          },
+          {
+            icon: <Cpu size={15} />,
+            label: '모델',
+            value: headline ? headline.modelName : '—',
+          },
+          {
+            icon: <Target size={15} />,
+            label: '실측 대조',
+            value: `최근 10건 중 ${matchedCount}건`,
+          },
+          {
+            label: '예측 시각',
+            value: headline ? new Date(headline.predictedAt).toLocaleString('ko-KR') : '—',
+          },
+        ]}
+      />
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <form onSubmit={submit} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <div>
-            <label className={labelCls}>관측소 *</label>
-            <select required value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })} className={inputCls}>
-              <option value="">선택</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>대기 이미지 *</label>
-            <input required type="file" accept="image/*" onChange={(e) => setImage(e.target.files?.[0] ?? null)} className="text-sm" />
-            <p className="mt-1 text-xs text-gray-400">
-              샘플: data/sample/dataset/images/ 의 PNG 파일 사용 가능
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
+      <SectionHeading title="예측 실행" accent={accent} hint="이미지와 환경값을 넣고 결과 확인" />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card>
+          <CardHeader title="예측 입력" hint="대기 이미지와 그때의 환경값을 함께 넣습니다" />
+          <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className={labelCls}>기온 (℃) *</label>
-              <input required type="number" step="any" value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} className={inputCls} />
+              <label className={labelClass}>관측소 *</label>
+              <select
+                required
+                value={form.siteId}
+                onChange={(e) => setForm({ ...form, siteId: e.target.value })}
+                className={inputClass}
+              >
+                <option value="">선택</option>
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
-              <label className={labelCls}>습도 (%) *</label>
-              <input required type="number" step="any" min={0} max={100} value={form.humidity} onChange={(e) => setForm({ ...form, humidity: e.target.value })} className={inputCls} />
+              <label className={labelClass}>대기 이미지 *</label>
+              <input
+                required
+                type="file"
+                accept="image/*"
+                onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                className="w-full text-sm text-ink-muted file:mr-3 file:rounded-control file:border-0 file:bg-brand-soft file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-ink hover:file:bg-brand-soft/70"
+              />
+              <p className="mt-1.5 text-xs text-ink-faint">
+                샘플 이미지는 data/sample/dataset/images/ 의 PNG 파일을 쓸 수 있습니다.
+              </p>
             </div>
-            <div>
-              <label className={labelCls}>풍속 (m/s) *</label>
-              <input required type="number" step="any" min={0} value={form.windSpeed} onChange={(e) => setForm({ ...form, windSpeed: e.target.value })} className={inputCls} />
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className={labelClass}>기온 (℃) *</label>
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  value={form.temperature}
+                  onChange={(e) => setForm({ ...form, temperature: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>습도 (%) *</label>
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  min={0}
+                  max={100}
+                  value={form.humidity}
+                  onChange={(e) => setForm({ ...form, humidity: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>풍속 (m/s) *</label>
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={form.windSpeed}
+                  onChange={(e) => setForm({ ...form, windSpeed: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
             </div>
-          </div>
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          <button type="submit" disabled={loading} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {loading ? '예측 중... (수 초 소요)' : '예측 실행'}
-          </button>
-        </form>
+            {error && <Notice tone="error">{error}</Notice>}
+            <Button type="submit" variant="primary" disabled={loading}>
+              {loading ? '예측 중... (수 초 소요)' : '예측 실행'}
+            </Button>
+          </form>
+        </Card>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-3 font-semibold text-gray-900">예측 결과</h3>
+        <Card>
+          <CardHeader title="예측 결과" />
           {result ? (
-            <div className="space-y-2">
-              <p className="text-4xl font-bold text-gray-900">
-                {result.predictedPm25} <span className="text-lg font-normal text-gray-500">㎍/㎥</span>
-              </p>
-              {grade && (
-                <span className={`inline-block rounded-full px-3 py-1 text-sm ${grade.badge}`}>
-                  {result.predictedGrade}
+            <div>
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span
+                  className="num text-[3rem] font-semibold leading-none tracking-tight"
+                  style={{ color: grade?.chart }}
+                >
+                  {result.predictedPm25}
                 </span>
-              )}
-              <p className="text-sm text-gray-600">관측소: {result.siteName}</p>
-              <p className="text-sm text-gray-600">
-                실제 관측값(최신): {result.actualPm25 ?? '없음'} ㎍/㎥
-              </p>
-              <p className="text-xs text-gray-400">모델: {result.modelName}</p>
+                <span className="text-sm text-ink-muted">㎍/㎥</span>
+                <GradeBadge grade={result.predictedGrade} />
+              </div>
+              {grade?.advice && <p className="mt-3 text-sm text-ink-muted">{grade.advice}</p>}
+              <dl className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-ink-faint">관측소</dt>
+                  <dd className="text-ink">{result.siteName}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-ink-faint">실제 관측값 (최신)</dt>
+                  <dd className="num text-ink">
+                    {result.actualPm25 != null ? `${result.actualPm25} ㎍/㎥` : '없음'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-ink-faint">사용 모델</dt>
+                  <dd className="text-ink">{result.modelName}</dd>
+                </div>
+              </dl>
             </div>
           ) : (
-            <p className="py-12 text-center text-sm text-gray-400">
-              왼쪽 양식으로 예측을 실행하면 결과가 표시됩니다
-            </p>
+            <EmptyState
+              title="아직 예측을 실행하지 않았습니다"
+              hint="왼쪽 양식을 채우고 [예측 실행]을 누르면 결과가 여기에 표시됩니다."
+            />
           )}
-        </div>
+        </Card>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-        <h3 className="border-b border-gray-100 px-5 py-3 font-semibold text-gray-900">최근 예측</h3>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-500">
+      <div>
+        <SectionHeading title="최근 예측" accent={accent} hint="최신 10건" />
+        <TableWrap>
+          <Thead>
             <tr>
-              <th className="px-4 py-2">시각</th>
-              <th className="px-4 py-2">관측소</th>
-              <th className="px-4 py-2">예측 PM2.5</th>
-              <th className="px-4 py-2">등급</th>
-              <th className="px-4 py-2">실제 관측값</th>
-              <th className="px-4 py-2">모델</th>
+              <Th>시각</Th>
+              <Th>관측소</Th>
+              <Th>예측 PM2.5</Th>
+              <Th>등급</Th>
+              <Th>실제 관측값</Th>
+              <Th>모델</Th>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+          </Thead>
+          <Tbody>
             {recent.map((p) => (
-              <tr key={p.id}>
-                <td className="px-4 py-2 text-gray-600">{new Date(p.predictedAt).toLocaleString('ko-KR')}</td>
-                <td className="px-4 py-2">{p.siteName}</td>
-                <td className="px-4 py-2 font-medium">{p.predictedPm25}</td>
-                <td className="px-4 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${gradeStyle(p.predictedGrade)?.badge ?? ''}`}>
-                    {p.predictedGrade}
-                  </span>
-                </td>
-                <td className="px-4 py-2">{p.actualPm25 ?? '-'}</td>
-                <td className="px-4 py-2 text-xs text-gray-500">{p.modelName}</td>
-              </tr>
+              <Tr key={p.id}>
+                <Td className="num text-ink-muted">
+                  {new Date(p.predictedAt).toLocaleString('ko-KR')}
+                </Td>
+                <Td>{p.siteName}</Td>
+                <Td className="num font-medium">{p.predictedPm25}</Td>
+                <Td>
+                  <GradeBadge grade={p.predictedGrade} size="sm" />
+                </Td>
+                <Td className="num">{p.actualPm25 ?? '-'}</Td>
+                <Td className="text-xs text-ink-faint">{p.modelName}</Td>
+              </Tr>
             ))}
-          </tbody>
-        </table>
+          </Tbody>
+        </TableWrap>
+        {recent.length === 0 && (
+          <EmptyState
+            title="예측 기록이 없습니다"
+            hint="예측을 실행하면 최근 10건이 여기에 쌓입니다."
+          />
+        )}
       </div>
     </div>
   )

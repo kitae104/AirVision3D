@@ -16,16 +16,16 @@ export default function RegionSelector({
     ...INCHEON_CORE_DISTRICTS.map((d) => ({ label: d.name, district: d.name })),
   ]
   return (
-    <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className="inline-flex gap-0.5 rounded-control border border-line bg-surface-muted p-0.5">
       {options.map((opt) => (
         <button
           key={opt.label}
           type="button"
           onClick={() => onChange(opt.district)}
-          className={`px-3 py-1.5 text-sm transition-colors ${
+          className={`rounded-[0.375rem] px-3 py-1.5 text-sm transition-colors ${
             value === opt.district
-              ? 'bg-blue-600 font-medium text-white'
-              : 'text-gray-600 hover:bg-gray-50'
+              ? 'bg-surface font-semibold text-ink shadow-card'
+              : 'text-ink-muted hover:text-ink'
           }`}
         >
           {opt.label}

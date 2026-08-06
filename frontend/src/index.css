@@ -1,1 +1,130 @@
 @import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+
+/*
+ * AirVision 3D 디자인 토큰
+ *
+ * 색 사용 원칙
+ *  - 파랑/초록/주황/빨강은 대기질 등급(좋음/보통/나쁨/매우나쁨) 전용이다.
+ *    등급이 아닌 곳에 이 색을 쓰면 사용자가 등급으로 오인한다.
+ *  - 버튼·링크·활성 메뉴 등 인터랙션은 브랜드(인디고)만 사용한다.
+ *  - 그 외 면·선·글자는 전부 무채색 토큰을 쓴다.
+ */
+
+/* 다크 모드는 <html class="dark"> 로 전환한다 (store/theme.ts) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+
+  --av-canvas: #f5f6f8;
+  --av-surface: #ffffff;
+  --av-surface-muted: #f1f3f6;
+  --av-surface-raised: #ffffff;
+  --av-line: #e4e7ec;
+  --av-line-strong: #d2d7e0;
+  --av-ink: #12161c;
+  --av-ink-muted: #5b6472;
+  --av-ink-faint: #8a93a2;
+  --av-brand: #4f46e5;
+  --av-brand-hover: #4338ca;
+  --av-brand-soft: #eef0fe;
+  --av-brand-ink: #4338ca;
+  --av-overlay: rgba(255, 255, 255, 0.92);
+  --av-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --av-shadow-panel: 0 4px 12px rgba(16, 24, 40, 0.08), 0 12px 32px rgba(16, 24, 40, 0.1);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --av-canvas: #0e1116;
+  --av-surface: #161a21;
+  --av-surface-muted: #1d222b;
+  --av-surface-raised: #1b2029;
+  --av-line: #262c36;
+  --av-line-strong: #363e4b;
+  --av-ink: #e8ebef;
+  --av-ink-muted: #9ba5b4;
+  --av-ink-faint: #6d7787;
+  --av-brand: #818cf8;
+  --av-brand-hover: #a5b0ff;
+  --av-brand-soft: #212545;
+  --av-brand-ink: #a5b0ff;
+  --av-overlay: rgba(22, 26, 33, 0.92);
+  --av-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --av-shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+@theme inline {
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+    'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+
+  --color-canvas: var(--av-canvas);
+  --color-surface: var(--av-surface);
+  --color-surface-muted: var(--av-surface-muted);
+  --color-surface-raised: var(--av-surface-raised);
+  --color-line: var(--av-line);
+  --color-line-strong: var(--av-line-strong);
+  --color-ink: var(--av-ink);
+  --color-ink-muted: var(--av-ink-muted);
+  --color-ink-faint: var(--av-ink-faint);
+  --color-brand: var(--av-brand);
+  --color-brand-hover: var(--av-brand-hover);
+  --color-brand-soft: var(--av-brand-soft);
+  --color-brand-ink: var(--av-brand-ink);
+  --color-overlay: var(--av-overlay);
+
+  /* 대기질 등급 전용 색 (grades.ts / publicGrades.ts 와 동일 팔레트) */
+  --color-grade-good: #3b82f6;
+  --color-grade-normal: #22c55e;
+  --color-grade-bad: #f97316;
+  --color-grade-worst: #ef4444;
+  --color-grade-none: #9ca3af;
+
+  --radius-card: 0.875rem;
+  --radius-control: 0.5rem;
+
+  --shadow-card: var(--av-shadow-card);
+  --shadow-panel: var(--av-shadow-panel);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--av-canvas);
+    color: var(--av-ink);
+    font-family: var(--font-sans);
+  }
+
+  /* 실시간 갱신 값이 자릿수 때문에 흔들리지 않도록 고정폭 숫자를 쓴다 */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* 키보드 포커스는 항상 보이게 한다 */
+  :focus-visible {
+    outline: 2px solid var(--av-brand);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--av-brand-soft);
+    color: var(--av-brand-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

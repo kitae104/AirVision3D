@@ -7,10 +7,30 @@
 import type { GradeStyle } from './grades'
 
 export const ODOR_GRADES: GradeStyle[] = [
-  { name: '양호', upper: 10, badge: 'bg-blue-100 text-blue-700', chart: '#3b82f6' },
-  { name: '관심', upper: 15, badge: 'bg-green-100 text-green-700', chart: '#22c55e' },
-  { name: '주의', upper: 20, badge: 'bg-orange-100 text-orange-700', chart: '#f97316' },
-  { name: '기준 초과', upper: null, badge: 'bg-red-100 text-red-700', chart: '#ef4444' },
+  {
+    name: '양호',
+    upper: 10,
+    badge: 'bg-blue-500/10 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300',
+    chart: '#3b82f6',
+  },
+  {
+    name: '관심',
+    upper: 15,
+    badge: 'bg-green-500/10 text-green-700 dark:bg-green-400/15 dark:text-green-300',
+    chart: '#22c55e',
+  },
+  {
+    name: '주의',
+    upper: 20,
+    badge: 'bg-orange-500/10 text-orange-700 dark:bg-orange-400/15 dark:text-orange-300',
+    chart: '#f97316',
+  },
+  {
+    name: '기준 초과',
+    upper: null,
+    badge: 'bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300',
+    chart: '#ef4444',
+  },
 ]
 
 export function odorGradeOf(dilution: number): GradeStyle {

@@ -1,30 +1,49 @@
 import { useEffect, useState } from 'react'
+import { Database, MapPin, Radio } from 'lucide-react'
 import { apiClient, errorMessage } from '../api/client'
-import type { ApiResponse, CsvUploadResult, Site } from '../api/client'
+import type { ApiResponse, CsvUploadResult, Observation, PageResponse, Site } from '../api/client'
+import {
+  Button,
+  Card,
+  CardHeader,
+  Notice,
+  PageHero,
+  SectionHeading,
+  inputClass,
+  labelClass,
+  useKindColor,
+} from '../components/ui'
 
-const inputCls =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none'
-const labelCls = 'mb-1 block text-sm font-medium text-gray-700'
+const inputCls = inputClass
+const labelCls = labelClass
 
 function Message({ text, ok }: { text: string; ok: boolean }) {
-  return (
-    <p
-      className={`rounded-md px-3 py-2 text-sm ${ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
-    >
-      {text}
-    </p>
-  )
+  return <Notice tone={ok ? 'success' : 'error'}>{text}</Notice>
 }
 
 /** 관리자 데이터 등록: 관측소 + 관측값 */
 export default function DataEntryPage() {
   const [sites, setSites] = useState<Site[]>([])
+  // 히어로에 "지금까지 얼마나 쌓였는지"를 보여 주기 위한 최소 조회 (1건만 받아 총계만 사용)
+  const [totalObs, setTotalObs] = useState<number | null>(null)
+  const [latestObs, setLatestObs] = useState<Observation | null>(null)
+  const accent = useKindColor('observation')
 
   const loadSites = () =>
     apiClient.get<ApiResponse<Site[]>>('/sites').then((res) => setSites(res.data.data))
 
+  const loadTotals = () =>
+    apiClient
+      .get<ApiResponse<PageResponse<Observation>>>('/observations?size=1')
+      .then((res) => {
+        setTotalObs(res.data.data.totalElements)
+        setLatestObs(res.data.data.content[0] ?? null)
+      })
+      .catch(() => setTotalObs(null))
+
   useEffect(() => {
     loadSites()
+    loadTotals()
   }, [])
 
   // --- 관측소 등록 ---
@@ -70,6 +89,7 @@ export default function DataEntryPage() {
         windDirection: obs.windDirection ? Number(obs.windDirection) : null,
       })
       setObsMsg({ text: '관측값 등록 완료', ok: true })
+      loadTotals()
       setObs({ ...obs, pm10: '', pm25: '', temperature: '', humidity: '', windSpeed: '', windDirection: '' })
     } catch (err) {
       setObsMsg({ text: errorMessage(err), ok: false })
@@ -94,6 +114,7 @@ export default function DataEntryPage() {
       const res = await apiClient.post<ApiResponse<CsvUploadResult>>('/observations/csv', body)
       setCsvResult(res.data.data)
       setCsvMsg({ text: 'CSV 업로드 완료', ok: true })
+      loadTotals()
     } catch (err) {
       setCsvMsg({ text: errorMessage(err), ok: false })
     } finally {
@@ -103,14 +124,32 @@ export default function DataEntryPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900">데이터 등록</h2>
-      <p className="text-sm text-gray-500">
-        개별 등록 또는 CSV 일괄 업로드(아래)로 관측값을 등록할 수 있습니다.
-      </p>
+      <PageHero
+        accent={accent}
+        eyebrow="자체 관측 · 등록 현황"
+        value={totalObs != null ? totalObs.toLocaleString() : '—'}
+        unit="건"
+        description="지금까지 등록된 자체 관측값입니다. 아래에서 한 건씩 또는 CSV로 추가합니다."
+        facts={[
+          { icon: <Radio size={15} />, label: '관측소', value: `${sites.length}곳` },
+          {
+            icon: <MapPin size={15} />,
+            label: '최근 등록 지점',
+            value: latestObs ? latestObs.siteName : '—',
+          },
+          {
+            icon: <Database size={15} />,
+            label: '최근 관측 시각',
+            value: latestObs ? new Date(latestObs.observedAt).toLocaleString('ko-KR') : '—',
+          },
+        ]}
+      />
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <form onSubmit={submitSite} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h3 className="font-semibold text-gray-900">관측소 등록</h3>
+      <SectionHeading title="개별 등록" accent={accent} hint="관측소를 만들고 관측값을 한 건씩 입력" />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card>
+          <CardHeader title="관측소 등록" hint="관측값을 기록할 지점을 먼저 만듭니다" />
+          <form onSubmit={submitSite} className="space-y-4">
           <div>
             <label className={labelCls}>이름 *</label>
             <input required value={site.name} onChange={(e) => setSite({ ...site, name: e.target.value })} className={inputCls} />
@@ -141,13 +180,15 @@ export default function DataEntryPage() {
             <input value={site.description} onChange={(e) => setSite({ ...site, description: e.target.value })} className={inputCls} />
           </div>
           {siteMsg && <Message {...siteMsg} />}
-          <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+          <Button type="submit" variant="primary">
             관측소 등록
-          </button>
-        </form>
+          </Button>
+          </form>
+        </Card>
 
-        <form onSubmit={submitObs} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h3 className="font-semibold text-gray-900">관측값 등록</h3>
+        <Card>
+          <CardHeader title="관측값 등록" hint="한 건씩 직접 입력합니다" />
+          <form onSubmit={submitObs} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>관측소 *</label>
@@ -188,47 +229,60 @@ export default function DataEntryPage() {
             </div>
           </div>
           {obsMsg && <Message {...obsMsg} />}
-          <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+          <Button type="submit" variant="primary">
             관측값 등록
-          </button>
-        </form>
+          </Button>
+          </form>
+        </Card>
       </div>
 
-      <form onSubmit={submitCsv} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <h3 className="font-semibold text-gray-900">관측값 CSV 일괄 업로드</h3>
-        <p className="text-sm text-gray-500">
-          헤더 필수 컬럼: <code className="rounded bg-gray-100 px-1">site_id</code>,{' '}
-          <code className="rounded bg-gray-100 px-1">observed_at</code> · 선택 컬럼:{' '}
-          <code className="rounded bg-gray-100 px-1">pm10, pm25, temperature, humidity, wind_speed, wind_direction</code>
-          <br />
-          시각은 ISO-8601(예: 2026-07-22T10:00:00Z) 또는 타임존 없는 한국 시각(예: 2026-07-22 10:00)을
-          지원합니다. 같은 관측소·시각의 기존 데이터는 건너뜁니다(최대 10,000행).
-        </p>
+      <SectionHeading title="일괄 등록" accent={accent} hint="CSV 파일로 한 번에 올리기" />
+      <Card>
+        <CardHeader
+          title="관측값 CSV 일괄 업로드"
+          hint="한 번에 최대 10,000행까지 등록합니다"
+        />
+        <form onSubmit={submitCsv} className="space-y-4">
+        <div className="rounded-control bg-surface-muted p-3.5 text-sm text-ink-muted">
+          <p>
+            필수 컬럼 <Code>site_id</Code>, <Code>observed_at</Code> · 선택 컬럼{' '}
+            <Code>pm10, pm25, temperature, humidity, wind_speed, wind_direction</Code>
+          </p>
+          <p className="mt-1.5">
+            시각은 ISO-8601(예: 2026-07-22T10:00:00Z) 또는 타임존 없는 한국 시각(예: 2026-07-22
+            10:00)을 지원합니다. 같은 관측소·시각의 기존 데이터는 건너뜁니다.
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="file"
             accept=".csv,text/csv"
             onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+            className="text-sm text-ink-muted file:mr-3 file:rounded-control file:border-0 file:bg-brand-soft file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-ink hover:file:bg-brand-soft/70"
           />
-          <button
-            type="submit"
-            disabled={!csvFile || csvUploading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
+          <Button type="submit" variant="primary" disabled={!csvFile || csvUploading}>
             {csvUploading ? '업로드 중…' : 'CSV 업로드'}
-          </button>
+          </Button>
         </div>
         {csvMsg && <Message {...csvMsg} />}
         {csvResult && (
-          <div className="space-y-2 rounded-md bg-gray-50 p-3 text-sm text-gray-700">
-            <p>
-              총 <b>{csvResult.totalRows}</b>행 · 등록 <b className="text-green-700">{csvResult.inserted}</b> ·
-              중복 건너뜀 <b>{csvResult.duplicateSkipped}</b> ·
-              실패 <b className={csvResult.failed > 0 ? 'text-red-700' : ''}>{csvResult.failed}</b>
-            </p>
+          <div className="rounded-control border border-line bg-surface-muted p-3.5 text-sm text-ink">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <ResultStat label="총 행" value={csvResult.totalRows} />
+              <ResultStat
+                label="등록"
+                value={csvResult.inserted}
+                className="text-emerald-600 dark:text-emerald-400"
+              />
+              <ResultStat label="중복 건너뜀" value={csvResult.duplicateSkipped} />
+              <ResultStat
+                label="실패"
+                value={csvResult.failed}
+                className={csvResult.failed > 0 ? 'text-red-600 dark:text-red-400' : undefined}
+              />
+            </div>
             {csvResult.errors.length > 0 && (
-              <ul className="list-inside list-disc text-red-700">
+              <ul className="mt-3 list-inside list-disc space-y-0.5 border-t border-line pt-3 text-xs text-red-600 dark:text-red-400">
                 {csvResult.errors.map((err) => (
                   <li key={`${err.line}-${err.message}`}>
                     {err.line}행: {err.message}
@@ -241,7 +295,31 @@ export default function DataEntryPage() {
             )}
           </div>
         )}
-      </form>
+        </form>
+      </Card>
     </div>
+  )
+}
+
+function Code({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-ink">{children}</code>
+  )
+}
+
+function ResultStat({
+  label,
+  value,
+  className = '',
+}: {
+  label: string
+  value: number
+  className?: string
+}) {
+  return (
+    <span>
+      <span className="text-xs text-ink-faint">{label} </span>
+      <b className={`num ${className}`}>{value.toLocaleString()}</b>
+    </span>
   )
 }
